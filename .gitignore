@@ -8,3 +8,5 @@ keys/
 *.log
 # Python
 __pycache__/
+# Editor settings (machine-specific paths)
+.vscode/
