@@ -4,27 +4,28 @@ Goal: ESP-IDF firmware on a LilyGo T-SIM7600 (ESP32 + SIM7600G-H) that reaches r
 LTE and talks to rmx-server-app-probe with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
 (`api.rmx.lt/probe/…`).
 
-**Read the wiki page `Modem-Knowledge` first** (local clone `C:\Projects\blade-of-grass.wiki`,
-`git pull` it; online: https://github.com/rmx-lt/blade-of-grass/wiki/Modem-Knowledge). It indexes
+**Read `wiki/Mower-Gateway-Probe-Knowledge.md` first** (local, in this repo; online:
+https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Probe-Knowledge). It indexes
 verified facts about the board, the modem, the ESP-IDF setup, esp_modem/PPP, and the server contract
-(pages `Modem-*`). The probe firmware is in `main/` (verified on hardware); the minimal reference is
-`tools/ppp_smoke/main/ppp_smoke.c`. Update the wiki pages when you learn something new or find a fact
-wrong (mark what you verified on hardware and when), then commit and push the wiki.
+(pages `Mower-Gateway-Probe-*`). The probe firmware is in `main/` (verified on hardware); the minimal reference is
+`tools/ppp_smoke/main/ppp_smoke.c`. Update the `wiki/` pages in the same PR when you learn something new or find a fact
+wrong (mark what you verified on hardware and when), per
+[Wiki-Policy](https://github.com/rmx-lt/blade-of-grass/blob/development/wiki/Wiki-Policy.md).
 
 Work and open questions are GitHub issues in this repo, on the Blade of Grass project
 (https://github.com/orgs/rmx-lt/projects/1), not notes in markdown files.
 
 Reusable board, chip and ESP-IDF knowledge also lives in the central hub `C:\Repos\esp-knowledge`
 (private repo `jRmx0/esp-knowledge`; read its `INDEX.md`). Its `boards/t-sim7600.md` has the header pinout and
-free GPIOs; put new board or chip facts there, and keep probe-specific knowledge in the wiki (`Modem-*` pages).
+free GPIOs; put new board or chip facts there, and keep probe-specific knowledge in the wiki (`Mower-Gateway-Probe-*` pages).
 
 ## Environment
 
 - Windows, PowerShell primary. ESP-IDF v6.1: `. C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1`, then `idf.py`.
 - Board on **COM6** (CH9102). Opening the port resets the ESP32 (not the modem).
-- No interactive `idf.py monitor` for agents: read the serial log with a pyserial script (see the wiki page `Modem-Tools`).
+- No interactive `idf.py monitor` for agents: read the serial log with a pyserial script (see the wiki page `Mower-Gateway-Probe-Tools`).
 - Related repos: `C:\Repos\esp-knowledge`, `C:\Repos\LilyGo-Modem-Series`, `C:\Repos\esp-protocols`, `C:\esp\v6.1\esp-idf`,
-  `C:\Projects\blade-of-grass\rmx-server` (has its own `CLAUDE.md` with server rules).
+  `C:\Projects\blade-of-grass\rmx-server\rmx-server-infra` (its `CLAUDE.md` has the VPS rules).
 
 ## Must-know pitfalls
 
@@ -38,5 +39,5 @@ free GPIOs; put new board or chip facts there, and keep probe-specific knowledge
 
 - This repo is public (Apache-2.0): never commit passwords, tokens, IMEI/ICCID/IMSI, or personal data.
   Device credentials go in a gitignored `sdkconfig` / NVS. Server secrets stay on the VPS; never print them.
-- VPS changes (new MQTT users, ACL) follow `rmx-server/CLAUDE.md` and need the user's OK.
+- VPS changes (new MQTT users, ACL) follow `rmx-server-infra/CLAUDE.md` and need the user's OK.
 - Flashing the board is fine (it's the dev board for this project); say what you flashed.
