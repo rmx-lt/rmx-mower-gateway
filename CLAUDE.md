@@ -1,5 +1,7 @@
 # rmx-mower-gateway-probe — notes for agents
 
+Project-wide agent rules live in the meta repo's [CLAUDE.md](https://github.com/rmx-lt/blade-of-grass/blob/development/CLAUDE.md); read it first. This file only adds what is specific to this repo.
+
 Goal: ESP-IDF firmware on a LilyGo T-SIM7600 (ESP32 + SIM7600G-H) that reaches rmx-server over
 LTE and talks to rmx-server-app-probe with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
 (`api.rmx.lt/probe/…`).
