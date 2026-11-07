@@ -1,4 +1,4 @@
-# tools/
+# Mower-Gateway-Probe-Tools: tools/
 
 Diagnostic firmware and scripts for the LilyGo T-SIM7600. All were run on the real board.
 

@@ -1,4 +1,4 @@
-# rmx-mower-gateway-probe
+# Mower-Gateway-Probe: rmx-mower-gateway-probe
 
 Part of **Blade of Grass** (open-source robotic mower). A learning/diagnostic firmware for
 the cellular link of the future rmx-mower: an ESP32 + SIM7600G-H board that connects over LTE

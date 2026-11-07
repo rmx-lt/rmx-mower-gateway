@@ -1,4 +1,4 @@
-# 01 — Board hardware: LilyGo T-SIM7600 (ESP32)
+# Mower-Gateway-Probe-Board-Hardware: Board hardware: LilyGo T-SIM7600 (ESP32)
 
 Product: <https://lilygo.cc/products/t-sim7600?variant=42774480224437> ·
 Wiki: <https://wiki.lilygo.cc/products/t-sim-series/t-sim7600x/> ·

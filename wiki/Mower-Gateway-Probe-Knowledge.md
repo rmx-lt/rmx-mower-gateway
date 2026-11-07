@@ -1,4 +1,4 @@
-# Knowledge index — LilyGo T-SIM7600 + ESP-IDF + rmx-server
+# Mower-Gateway-Probe-Knowledge: Knowledge index — LilyGo T-SIM7600 + ESP-IDF + rmx-server
 
 Start here. Facts marked "verified" were measured on the real board on 2026-10-19.
 

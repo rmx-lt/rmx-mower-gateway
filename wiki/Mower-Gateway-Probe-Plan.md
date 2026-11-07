@@ -1,4 +1,4 @@
-# 06 — Plan for the probe firmware, risks, open questions
+# Mower-Gateway-Probe-Plan: Plan for the probe firmware, risks, open questions
 
 ## Goal
 

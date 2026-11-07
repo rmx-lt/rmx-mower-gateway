@@ -1,4 +1,4 @@
-# 05 — What the device talks to: rmx-server / rmx-server-app-probe
+# Mower-Gateway-Probe-Server-Contract: What the device talks to: rmx-server / rmx-server-app-probe
 
 Sources (local): `C:\Projects\blade-of-grass\README.md` (architecture),
 `C:\Projects\blade-of-grass\rmx-server\CLAUDE.md` (server notes),

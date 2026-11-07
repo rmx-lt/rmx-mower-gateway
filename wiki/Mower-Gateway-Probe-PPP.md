@@ -1,4 +1,4 @@
-# 04 — esp_modem + PPP on this board (the chosen data path)
+# Mower-Gateway-Probe-PPP: esp_modem + PPP on this board (the chosen data path)
 
 Component: `espressif/esp_modem` **2.1.0** (registry) · source + examples:
 `C:\Repos\esp-protocols\components\esp_modem` · docs:

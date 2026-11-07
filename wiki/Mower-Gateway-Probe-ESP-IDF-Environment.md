@@ -1,4 +1,4 @@
-# 03 — ESP-IDF environment on the dev PC
+# Mower-Gateway-Probe-ESP-IDF-Environment: ESP-IDF environment on the dev PC
 
 ## Installed toolchain (verified 2026-10-19)
 
