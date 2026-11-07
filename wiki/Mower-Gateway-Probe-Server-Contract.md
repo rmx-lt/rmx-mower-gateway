@@ -1,9 +1,8 @@
 # Mower-Gateway-Probe-Server-Contract: What the device talks to: rmx-server / rmx-server-app-probe
 
-Sources (local): `C:\Projects\blade-of-grass\README.md` (architecture),
-`C:\Projects\blade-of-grass\rmx-server\CLAUDE.md` (server notes),
-`rmx-server\rmx-server-app-probe\README.md` + `crates/probe-protocol/src/lib.rs` (wire protocol),
-`rmx-server\rmx-server-infra\services\mosquitto\config\{mosquitto.conf,acl}`, `…\caddy\Caddyfile`.
+Sources: [Home](Home) (architecture), `blade-of-grass/CLAUDE.md`,
+`rmx-server-app-probe` README and `internal/protocol` (wire protocol),
+`rmx-server-infra` `services/mosquitto/config/mosquitto.conf`, `services/mosquitto/config/acl`, `services/caddy/Caddyfile`.
 Re-read those before coding: they are the source of truth and may have changed.
 
 ## Endpoints
@@ -12,7 +11,8 @@ Re-read those before coding: they are the source of truth and may have changed.
 |---|---|---|
 | `https://api.rmx.lt/probe/…` | rmx-server-app-probe REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
 | `mqtts://mqtt.rmx.lt:8883` | Mosquitto 2.1, MQTT 3.1.1/5 over TLS (min TLS 1.2) | LE cert copied from Caddy |
-| `wss://mqtt.rmx.lt/mqtt` | MQTT over WebSockets (browsers) | Caddy |
+
+Browsers do not speak MQTT. `https://mqtt.rmx.lt` only tells clients to use `mqtts://mqtt.rmx.lt:8883`.
 
 - VPS `45.81.252.43` (`api`, `mqtt` are CNAMEs to `rmx.lt`). IPv4 only.
 - **The probe is off by default on the VPS** (owner starts it when needed). Off → `/probe/*`
@@ -61,10 +61,9 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
   - `pattern readwrite mower/%u/#` — **every login** may use only `mower/<its username>/#`.
   - `user app` → `mower/#` (backend).
   - `user probe-app` → `probe/#` (probe server).
-  - `user probe-web` → write `probe/req/+`, read `probe/res/+`, `probe/events/#`, `probe/status/#`.
-  - `user probe-device` (added 2026-10-19, for this firmware) → write `probe/req/probe-device`,
+  - `user probe-device` → write `probe/req/probe-device`,
     read `probe/res/probe-device`, `probe/events/#`, `probe/status/#`.
-- Logins that exist: `app`, `mower-01`, `probe-app`, `probe-web`, `probe-device`. Passwords live only on the
+- Logins that exist: `app`, `mower-01`, `probe-app`, `probe-device`. Passwords live only on the
   server (`services/mosquitto/data/credentials.txt`, root 0600). **Never print or commit them.**
   The user must provide the device's password (e.g. via `menuconfig`/NVS, not committed).
 - Mosquitto accepts a SUBSCRIBE to a forbidden topic but never delivers to it (no error!).
@@ -101,13 +100,8 @@ HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
 
 - The server subscribes `probe/req/+` (QoS 1), answers on `probe/res/<same id>` (QoS 1).
   Client id: 1–64 chars `[A-Za-z0-9_-]`.
-- **Which login can a device use?** Only `probe-web` (or `probe-app`) may touch `probe/#`.
-  On 8883 the client id is forced to the username, so with `probe-web` the device
-  publishes on `probe/req/probe-web` and subscribes `probe/res/probe-web`,
-  `probe/events/records`, `probe/status/server`. (`mower-01` can't reach `probe/#`.)
-  **Decided 2026-10-19:** the device uses its own login `probe-device` (topics
-  `probe/req|res/probe-device`); verified on hardware.
-- Requests (`crates/probe-protocol`):
+- **Which login can a device use?** `probe-device`. On 8883 the client id is forced to the username, so the device publishes on `probe/req/probe-device` and subscribes `probe/res/probe-device`, `probe/events/records`, `probe/status/server`. `mower-01` cannot reach `probe/#`. `probe-app` is the server's login, not a device's.
+- Requests (`internal/protocol` in rmx-server-app-probe):
 
 ```jsonc
 { "request_id": "<any string, e.g. uuid>", "request": { "op": "list" } }

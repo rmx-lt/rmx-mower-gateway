@@ -19,9 +19,9 @@
   `include/esp_modem_config.h` (DTE defaults), `src/esp_modem_command_library.cpp`,
   `command/src/esp_modem_modules.cpp`, `examples/pppos_client`, `examples/simple_cmux_client`, `Kconfig`.
 - ESP-IDF v6.1 (`C:\esp\v6.1\esp-idf`): component list (no `mqtt`, no `json`), cert bundle.
-- Blade of Grass: `C:\Projects\blade-of-grass\README.md`, `rmx-server\CLAUDE.md`,
-  `rmx-server-app-probe` (README, `crates/probe-protocol/src/lib.rs`, `crates/probe-server/src/{mqtt.rs,http.rs,auth/*}`),
-  `rmx-server-infra/services/{mosquitto/config/*,caddy/Caddyfile}`.
+- Blade of Grass: `blade-of-grass` README and `CLAUDE.md`,
+  `rmx-server-app-probe` (README, `internal/protocol`, `internal/server`, `internal/auth`),
+  `rmx-server-infra/services/mosquitto/config` and `services/caddy/Caddyfile`.
 
 ## Web
 

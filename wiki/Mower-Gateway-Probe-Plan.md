@@ -125,8 +125,7 @@ MQTT client settings to start with:
 - `broker.address.uri = "mqtts://mqtt.rmx.lt:8883"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
   (or `certificate = <isrg-root-x1+x2 PEM>` to trust only those roots)
 - `credentials.username/password` from config; client id is forced to the username by the broker
-- `session.keepalive = 60`, `session.last_will` → a status topic (for the probe: none of
-  `probe/…` is writable by `probe-web` except `probe/req/+`; agree a topic with the user)
+- `session.keepalive = 60`, `session.last_will` → `mower/probe-device/status` (the device login `probe-device` cannot write `probe/status/#`)
 - `buffer.size` ≥ 16–64 KB if the device sends `list`
 - QoS 1 for requests; match responses by `request_id`
 
