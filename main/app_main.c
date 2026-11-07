@@ -1,6 +1,6 @@
 /*
- * rmx-mower-modem-probe: LilyGo T-SIM7600 (ESP32 + SIM7600G-H) talking to
- * rmx-backend-probe over LTE.
+ * rmx-mower-gateway-probe: LilyGo T-SIM7600 (ESP32 + SIM7600G-H) talking to
+ * rmx-server-app-probe over LTE.
  *
  * board -> cell (PPP) -> HTTPS (health, login, create, list) -> MQTT
  * (connect, create + list over probe/req|res/<user>) -> stay online and run

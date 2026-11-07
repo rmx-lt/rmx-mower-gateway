@@ -1,7 +1,7 @@
-# rmx-mower-modem-probe — notes for agents
+# rmx-mower-gateway-probe — notes for agents
 
 Goal: ESP-IDF firmware on a LilyGo T-SIM7600 (ESP32 + SIM7600G-H) that reaches rmx-server over
-LTE and talks to rmx-backend-probe with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
+LTE and talks to rmx-server-app-probe with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
 (`api.rmx.lt/probe/…`).
 
 **Read the wiki page `Modem-Knowledge` first** (local clone `C:\Projects\blade-of-grass.wiki`,
