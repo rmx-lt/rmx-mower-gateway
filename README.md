@@ -5,10 +5,11 @@ the cellular link of the future rmx-mower: an ESP32 + SIM7600G-H board (LilyGo T
 that connects over LTE to **rmx-server** and talks to **rmx-server-app-probe** with
 **MQTT over TLS** and **HTTPS**. ESP-IDF v6.1, esp_modem (PPP), mbedTLS, esp-mqtt.
 
-- **Docs:** [Modem-Probe](https://github.com/rmx-lt/blade-of-grass/wiki/Modem-Probe) on the wiki
+- **Docs:** [Mower-Gateway-Probe](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Probe) on the wiki
   (remote commands, OTA, error codes) and the
-  [knowledge index](https://github.com/rmx-lt/blade-of-grass/wiki/Modem-Knowledge)
-  (board, modem, ESP-IDF, PPP, server contract, plan).
+  [knowledge index](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Probe-Knowledge)
+  (board, modem, ESP-IDF, PPP, server contract, plan). The pages live in this repo's `wiki/` folder;
+  rules: [Wiki-Policy](https://github.com/rmx-lt/blade-of-grass/blob/development/wiki/Wiki-Policy.md).
 - **Work:** issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1).
 
 ## Build, configure, flash (PowerShell)
