@@ -1,4 +1,4 @@
-/* rmx-backend-probe JSON envelopes (crates/probe-protocol in rmx-backend-probe). */
+/* rmx-server-app-probe JSON envelopes (crates/probe-protocol in rmx-server-app-probe). */
 #pragma once
 
 #include <stdbool.h>

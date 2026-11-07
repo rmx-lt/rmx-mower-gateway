@@ -1,8 +1,8 @@
-# rmx-mower-modem-probe
+# rmx-mower-gateway-probe
 
 Part of **Blade of Grass** (open-source robotic mower). A learning/diagnostic firmware for
 the cellular link of the future rmx-mower: an ESP32 + SIM7600G-H board (LilyGo T-SIM7600)
-that connects over LTE to **rmx-server** and talks to **rmx-backend-probe** with
+that connects over LTE to **rmx-server** and talks to **rmx-server-app-probe** with
 **MQTT over TLS** and **HTTPS**. ESP-IDF v6.1, esp_modem (PPP), mbedTLS, esp-mqtt.
 
 - **Docs:** [Modem-Probe](https://github.com/rmx-lt/blade-of-grass/wiki/Modem-Probe) on the wiki
