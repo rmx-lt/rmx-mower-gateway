@@ -36,4 +36,4 @@ certs/       ISRG Root X1/X2 PEMs (public CA roots for rmx.lt's Let's Encrypt ch
 
 ## License
 
-[Apache-2.0](LICENSE).
+Code and documentation are licensed under [Apache-2.0](LICENSE).
