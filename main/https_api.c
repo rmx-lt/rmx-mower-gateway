@@ -1,4 +1,5 @@
 #include "https_api.h"
+#include "creds.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -185,12 +186,14 @@ esp_err_t https_api_health(void)
 
 esp_err_t https_api_login(void)
 {
-    if (!CONFIG_PROBE_WEB_PASSWORD[0]) {
-        ESP_LOGE(TAG, "CONFIG_PROBE_WEB_PASSWORD is empty: set it with menuconfig");
-        return ESP_ERR_INVALID_STATE;
+    char password[CREDS_MAX_LEN];
+    esp_err_t err = creds_get(CREDS_WEB_PW, password, sizeof(password));
+    if (err != ESP_OK) {
+        return err;
     }
     s_cookie[0] = '\0';
-    char *json = probe_proto_build_login(CONFIG_PROBE_WEB_USERNAME, CONFIG_PROBE_WEB_PASSWORD);
+    char *json = probe_proto_build_login(CONFIG_PROBE_WEB_USERNAME, password);
+    memset(password, 0, sizeof(password));
     int status = request(HTTP_METHOD_POST, "/api/auth/login", json);
     free(json);
     if (status != 200) {

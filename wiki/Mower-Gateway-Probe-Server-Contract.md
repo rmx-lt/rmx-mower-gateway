@@ -65,7 +65,7 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
     read `probe/res/probe-device`, `probe/events/#`, `probe/status/#`.
 - Logins that exist: `app`, `mower-01`, `probe-app`, `probe-device`. Passwords live only on the
   server (`services/mosquitto/data/credentials.txt`, root 0600). **Never print or commit them.**
-  The user must provide the device's password (e.g. via `menuconfig`/NVS, not committed).
+  The user must provide the device's password (into NVS with `tools/provision_nvs.ps1`, not committed).
 - Mosquitto accepts a SUBSCRIBE to a forbidden topic but never delivers to it (no error!).
   A PUBLISH to a forbidden topic is silently dropped (MQTT 3.1.1).
 - Bad login → CONNACK 5 "not authorized" (verified from the device).

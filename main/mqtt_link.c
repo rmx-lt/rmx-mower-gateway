@@ -1,4 +1,5 @@
 #include "mqtt_link.h"
+#include "creds.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@ static const char *TAG = "mqtt";
 
 static esp_mqtt_client_handle_t s_client;
 static EventGroupHandle_t s_ev;
+static char s_password[CREDS_MAX_LEN];   /* esp-mqtt keeps the pointer */
 static SemaphoreHandle_t s_req_lock;
 static char s_req_topic[96];
 static char s_res_topic[96];
@@ -153,9 +155,9 @@ void mqtt_link_set_cmd_handler(mqtt_link_cmd_cb_t cb)
 
 esp_err_t mqtt_link_start(void)
 {
-    if (!CONFIG_PROBE_MQTT_PASSWORD[0]) {
-        ESP_LOGE(TAG, "CONFIG_PROBE_MQTT_PASSWORD is empty: set it with menuconfig");
-        return ESP_ERR_INVALID_STATE;
+    esp_err_t err = creds_get(CREDS_MQTT_PW, s_password, sizeof(s_password));
+    if (err != ESP_OK) {
+        return err;
     }
     s_ev = xEventGroupCreate();
     s_req_lock = xSemaphoreCreateMutex();
@@ -169,7 +171,7 @@ esp_err_t mqtt_link_start(void)
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
         .credentials.username = CONFIG_PROBE_MQTT_USERNAME,
         .credentials.client_id = CONFIG_PROBE_MQTT_USERNAME,   /* the broker forces it anyway */
-        .credentials.authentication.password = CONFIG_PROBE_MQTT_PASSWORD,
+        .credentials.authentication.password = s_password,
         .session.keepalive = 60,                  /* below typical CGNAT idle timeouts */
         .session.message_retransmit_timeout = 10000,   /* LTE round trips + TLS */
         .session.last_will = {

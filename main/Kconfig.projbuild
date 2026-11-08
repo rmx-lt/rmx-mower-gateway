@@ -1,6 +1,6 @@
 menu "rmx probe"
 
-    comment "Secrets: set them with menuconfig; they land in the gitignored sdkconfig. Never commit them."
+    comment "Passwords are not here: they live in NVS (tools/provision_nvs.ps1)."
 
     config PROBE_APN
         string "Cellular APN"
@@ -19,10 +19,6 @@ menu "rmx probe"
             Mosquitto login. On 8883 the broker forces the client id to the
             username, so the device uses probe/req/<username> and
             probe/res/<username>.
-
-    config PROBE_MQTT_PASSWORD
-        string "MQTT password"
-        default ""
 
     config PROBE_MQTT_STATUS_TOPIC
         string "Retained status / last-will topic (empty = none)"
@@ -44,10 +40,6 @@ menu "rmx probe"
         string "Probe web login username"
         default "probe-device"
 
-    config PROBE_WEB_PASSWORD
-        string "Probe web login password"
-        default ""
-
     config PROBE_HEARTBEAT_S
         int "Seconds between MQTT create requests after the self-test (0 = off)"
         default 0
@@ -63,10 +55,6 @@ menu "rmx probe"
     config PROBE_OTA_USERNAME
         string "Firmware updates: download login (HTTP basic auth)"
         default "probe-device"
-
-    config PROBE_OTA_PASSWORD
-        string "Firmware updates: download password (empty = no auth)"
-        default ""
 
     config PROBE_OTA_CONFIRM_S
         int "Seconds a new image has to reach MQTT before it rolls back"
