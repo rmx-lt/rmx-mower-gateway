@@ -16,6 +16,7 @@
 #include "esp_timer.h"
 #include "cell.h"
 #include "mqtt_link.h"
+#include "creds.h"
 #include "probe_proto.h"
 #include "sdkconfig.h"
 
@@ -139,9 +140,10 @@ static void ota_task(void *arg)
         .buffer_size = 4096,
         .buffer_size_tx = 1024,
     };
-    if (CONFIG_PROBE_OTA_PASSWORD[0]) {
+    char ota_pw[CREDS_MAX_LEN];
+    if (creds_get(CREDS_OTA_PW, ota_pw, sizeof(ota_pw)) == ESP_OK && ota_pw[0]) {
         http.username = CONFIG_PROBE_OTA_USERNAME;
-        http.password = CONFIG_PROBE_OTA_PASSWORD;
+        http.password = ota_pw;
         http.auth_type = HTTP_AUTH_TYPE_BASIC;
     }
 

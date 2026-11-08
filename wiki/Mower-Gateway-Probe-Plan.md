@@ -97,7 +97,7 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
   verified on the board yet: [rmx-mower-gateway-probe#15](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/15).
 
 Open work is tracked as issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1):
-reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/16)), secrets in NVS instead of sdkconfig ([#17](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/17)),
+reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/16)),
 certificate date checks after SNTP ([#18](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/18)), CMUX / power saving / modem MQTT AT path ([#19](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/19)),
 OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/15)).
 
@@ -115,7 +115,8 @@ main/
   probe_proto.c/.h  JSON envelopes (espressif/cjson), request_id generation
   app_main.c        sequence: board → cell → https test → mqtt test → loop
 idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
-Kconfig.projbuild   APN, MQTT user/password, HTTPS user/password (values in sdkconfig, NOT committed)
+Kconfig.projbuild   APN, MQTT and HTTPS usernames (no passwords)
+creds.c/.h          passwords from NVS (namespace creds: mqtt_pw, web_pw, ota_pw)
 partitions.csv      16 MB layout with OTA slots
 ```
 
@@ -135,9 +136,9 @@ MQTT client settings to start with:
    `probe-device-login`). ACL: write `probe/req/probe-device`; read `probe/res/probe-device`,
    `probe/events/#`, `probe/status/#` (plus the `mower/probe-device/#` pattern every login gets).
 2. **HTTPS login**: a dedicated web user **`probe-device`** (`probe-server create-user`).
-3. **Secrets**: both passwords live in the gitignored `sdkconfig` (`CONFIG_PROBE_MQTT_PASSWORD`,
-   `CONFIG_PROBE_WEB_PASSWORD`); plain-text copies only in the VPS `credentials.txt` files.
-   Copy them into `sdkconfig` with ssh without printing them. NVS later.
+3. **Secrets**: the passwords live in the board's NVS (`creds` namespace), written by `tools/provision_nvs.ps1`
+   (hidden prompts or `RMX_MQTT_PW` / `RMX_WEB_PW` / `RMX_OTA_PW`); plain-text copies only in the VPS
+   `credentials.txt` files. Before [#17](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/17) they sat in the gitignored `sdkconfig`.
 4. Status / last will: `mower/probe-device/status` (retained `online` / `offline`), the only
    status topic the ACL lets `probe-device` write.
 5. Remote commands from the PC use the existing `app` login (no new VPS user).
