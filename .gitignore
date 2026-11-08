@@ -3,6 +3,10 @@ build/
 managed_components/
 sdkconfig
 sdkconfig.old
+# PlatformIO build output and per-env sdkconfig (holds APN, MQTT and web passwords)
+.pio/
+sdkconfig.*
+!sdkconfig.defaults
 # OTA signing key (back it up offline)
 keys/
 *.log

@@ -53,3 +53,22 @@ t = time.time()
 while time.time() - t < 60:
     print(s.read(4096).decode("utf-8", "replace"), end="")
 ```
+
+## PlatformIO build (alternative to idf.py)
+
+`platformio.ini` builds the probe firmware (`main/`) with PlatformIO next to `idf.py`; `idf.py` stays the reference build and
+`tools/ppp_smoke` and `tools/at_bridge` are idf.py only. Both builds read `sdkconfig.defaults` and `partitions.csv`.
+
+```powershell
+~\.platformio\penv\Scripts\pio.exe run -e probe              # build (first build ~13 min, downloads ~1.5-2 GB)
+~\.platformio\penv\Scripts\pio.exe run -e probe -t upload    # flash on COM6
+```
+
+Verified on hardware 2026-11-08:
+- Platform `espressif32 @ 7.1.0` (pinned) bundles ESP-IDF v6.1.0; the `pioarduino` fork is still on IDF 5.5. Managed components (esp_modem, mqtt, cjson) resolve from `main/idf_component.yml`; no `lib_deps`.
+- PlatformIO writes `sdkconfig.probe` (gitignored, like `.pio/`).
+- PlatformIO does **not** sign the image. `sign_ota.py` (post-build hook) signs `firmware.bin` with `keys/ota_signing_key.pem`; check with `espsecure.py verify_signature --version 2 --keyfile keys/ota_signing_key.pem .pio/build/probe/firmware.bin`.
+- A changed `version.txt` is only picked up after a CMake reconfigure: delete `.pio/build/probe/CMakeCache.txt`, then build.
+- Flashing with `pio ... -t upload` keeps NVS (credentials); the CH9102 auto-reset works with the default settings (no `monitor_rts`/`monitor_dtr` override needed); `serial_log.py` also works as before.
+- The PlatformIO-built image passed the PPP/HTTPS/MQTT self-test, and an OTA update to a PlatformIO-built, signed 0.2.4 image succeeded (`ota_0` to `ota_1`, confirmed).
+- `tools/release.ps1` is idf.py only; for a PlatformIO image upload `firmware.bin` as `<version>.bin` by hand and send `tools\mqtt_cmd.ps1 ota`. Use PowerShell's `ssh`/`scp` (Git Bash's has no key).
