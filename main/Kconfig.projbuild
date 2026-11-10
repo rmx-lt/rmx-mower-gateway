@@ -1,14 +1,6 @@
 menu "rmx probe"
 
-    comment "The key and certificate live in NVS (tools/provision_cert.ps1); until a certificate is stored the device name and password come from tools/provision_nvs.ps1."
-
-    config PROBE_DEVICE_NAME
-        string "Default device name (used when NVS has none)"
-        default "mower-01"
-        help
-            Used only when NVS has no creds/device key. The name is the MQTT
-            username and client id (on 8883 the broker forces client id =
-            username) and the <name> in mower/<name>/req|res|cmd|ack|status|fw.
+    comment "Identity: the client certificate in NVS (tools/provision_cert.ps1); its CN is the device name. No passwords."
 
     config PROBE_APN
         string "Cellular APN"
@@ -16,16 +8,12 @@ menu "rmx probe"
         help
             APN of the SIM. "internet" for Tele2 LT / Pildyk.
 
-    config PROBE_MQTT_URI
-        string "MQTT broker URI"
-        default "mqtts://mqtt.rmx.lt:8883"
-
     config PROBE_MQTT_CERT_URI
-        string "MQTT broker URI for the client certificate login"
+        string "MQTT broker URI (client certificate login)"
         default "mqtts://mqtt.rmx.lt:8884"
         help
-            Used instead of PROBE_MQTT_URI when NVS holds a client certificate.
-            No password is sent; the broker takes the identity from the CN.
+            No password is sent; the broker takes the identity from the CN
+            of the client certificate and forces client id = username.
 
     config PROBE_HEARTBEAT_S
         int "Seconds between MQTT create requests after the self-test (0 = off)"

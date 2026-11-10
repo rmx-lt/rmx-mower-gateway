@@ -27,7 +27,6 @@ static const char *TAG = "mqtt";
 
 static esp_mqtt_client_handle_t s_client;
 static EventGroupHandle_t s_ev;
-static char s_password[CREDS_MAX_LEN];   /* esp-mqtt keeps the pointer */
 static SemaphoreHandle_t s_req_lock;
 static char s_req_topic[96];
 static char s_res_topic[96];
@@ -188,15 +187,12 @@ void mqtt_link_set_fw_handler(mqtt_link_fw_cb_t cb)
 
 esp_err_t mqtt_link_start(void)
 {
-    /* Client certificate on its own port when the board has one, else the password login. */
+    /* The only login is the client certificate (its CN is the name, no password). */
     const char *chain = devcert_chain_pem();
     const char *key = devcert_key_pem();
-    bool use_cert = chain && key;
-    if (!use_cert) {
-        esp_err_t err = creds_get(CREDS_MQTT_PW, s_password, sizeof(s_password));
-        if (err != ESP_OK) {
-            return err;
-        }
+    if (!chain || !key) {
+        ESP_LOGE(TAG, "no client certificate: not connecting (tools/provision_cert.ps1)");
+        return ESP_ERR_INVALID_STATE;
     }
     s_ev = xEventGroupCreate();
     s_req_lock = xSemaphoreCreateMutex();
@@ -211,13 +207,12 @@ esp_err_t mqtt_link_start(void)
     snprintf(s_fw_res_topic, sizeof(s_fw_res_topic), "mower/%s/fw/res", name);
 
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri = use_cert ? CONFIG_PROBE_MQTT_CERT_URI : CONFIG_PROBE_MQTT_URI,
+        .broker.address.uri = CONFIG_PROBE_MQTT_CERT_URI,
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
         .credentials.username = name,
         .credentials.client_id = name,   /* the broker forces it anyway */
-        .credentials.authentication.password = use_cert ? NULL : s_password,
-        .credentials.authentication.certificate = use_cert ? chain : NULL,   /* PEM, NUL-terminated */
-        .credentials.authentication.key = use_cert ? key : NULL,
+        .credentials.authentication.certificate = chain,   /* PEM, NUL-terminated */
+        .credentials.authentication.key = key,
         .session.keepalive = 60,                  /* below typical CGNAT idle timeouts */
         .session.message_retransmit_timeout = 10000,   /* LTE round trips + TLS */
         .session.last_will = {
@@ -236,7 +231,7 @@ esp_err_t mqtt_link_start(void)
         .buffer.out_size = 2048,
         .task.stack_size = 8192,
     };
-    ESP_LOGI(TAG, "login: %s", use_cert ? "client certificate" : "password");
+    ESP_LOGI(TAG, "login: client certificate");
     s_client = esp_mqtt_client_init(&cfg);
     if (!s_client) {
         return ESP_FAIL;

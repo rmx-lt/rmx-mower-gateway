@@ -14,7 +14,8 @@ has no HTTPS client.
 - [x] SIM ready, LTE registration on Tele2 LT (APN `internet`)
 - [x] PPP with esp_modem 2.1.0 on ESP-IDF v6.1, IP in ~160 ms after dial
 - [x] HTTPS GET `/probe/health` → 200, mbedTLS + cert bundle verification
-- [x] Client certificate (issue 43): key generation, CSR, chain write/clear and password fallback verified on the board 2026-11-10; image +12 KB flash (741376 bytes signed), +0.5 KB static RAM. Open: live login on 8884 with the real CA, then drop `mqtt_pw` and `provision_nvs.ps1`.
+- [x] Client certificate (issue 43): key generation, CSR, chain write/clear and password fallback verified on the board 2026-11-10; image +12 KB flash (741376 bytes signed), +0.5 KB static RAM. Live login on 8884 with the real CA (serial 01, CN mower-01), self-test and an OTA to 0.3.2 passed 2026-11-11.
+- [x] Password login removed (issue 43, 2026-11-11): no `mqtt_pw`, no NVS `device`, no 8883 URI, `provision_nvs.ps1` deleted. 0.3.3 arrived by OTA from 0.3.2 with key and chain kept, `login: client certificate`, self-test PASSED. PlatformIO `probe` build: flash 718821 -> 718073 bytes (-748), RAM 21304 -> 21144 (-160); signed image still 741376 bytes.
 - [x] MQTTS TLS handshake to 8883 + MQTT CONNECT reaches Mosquitto (fake login → CONNACK 5)
 - [x] Recovery after an ESP reset while the modem is in PPP
 - [x] Fallback: modem-internal TLS (AT+CCH*) with CA verification to both hosts
@@ -122,15 +123,15 @@ OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15))
 main/
   board.c/.h        pins, modem power on/off, STATUS
   cell.c/.h         esp_modem DTE/DCE, registration wait, PPP up/down, reconnect loop, events
-  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8883, LWT, subscribe, request/response, fw/req
+  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8884 (client certificate), LWT, subscribe, request/response, fw/req
   gnss.c/.h         SIM7600 GNSS over AT (via cell_with_command_mode): on at boot, read on demand
   remote_cmd.c/.h   commands from mower/<user>/cmd, acks on …/cmd/ack
   ota.c/.h          MQTT chunk download, image checks, first-boot confirm / rollback
   probe_proto.c/.h  JSON envelopes (espressif/cjson), request_id generation
   app_main.c        sequence: board → cell → mqtt test → loop
 idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
-Kconfig.projbuild   APN, server URL, default device name (no passwords)
-creds.c/.h          device name (certificate CN, else NVS device) + MQTT password from NVS (creds: device, mqtt_pw)
+Kconfig.projbuild   APN, broker URL (no device name, no passwords)
+creds.c/.h          device name = certificate CN
 devcert.c/.h        P-256 key + CSR + certificate chain in NVS (creds: key, chain), serial provisioning commands
 partitions.csv      16 MB layout with OTA slots
 ```
@@ -138,9 +139,9 @@ partitions.csv      16 MB layout with OTA slots
 Start from [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/ppp_smoke/main/ppp_smoke.c).
 
 MQTT client settings to start with:
-- `broker.address.uri = "mqtts://mqtt.rmx.lt:8883"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
+- `broker.address.uri = "mqtts://mqtt.rmx.lt:8884"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
   (or `certificate = <isrg-root-x1+x2 PEM>` to trust only those roots)
-- `credentials.username/password` from NVS (username = device name); client id is forced to the username by the broker
+- `credentials.username` = certificate CN, `authentication.certificate/key` from NVS, no password; client id is forced to the username by the broker
 - `session.keepalive = 60`, `session.last_will` → `mower/<name>/status` (`mower-01` owns `mower/mower-01/#`)
 - `buffer.size = 8192` so one firmware chunk fits; `buffer.out_size = 2048`
 - `buffer.size` ≥ 16–64 KB if the device sends `list`
@@ -152,9 +153,7 @@ MQTT client settings to start with:
    `probe-device-login`). ACL: write `probe/req/probe-device`; read `probe/res/probe-device`,
    `probe/events/#`, `probe/status/#` (plus the `mower/probe-device/#` pattern every login gets).
 2. **HTTPS login**: a dedicated web user **`probe-device`** (`probe-server create-user`).
-3. **Secrets**: the board's key and certificate chain (`creds/key`, `creds/chain`, `tools/provision_cert.ps1`) replace the passwords (issue 43; `mqtt_pw` stays as fallback until the live switch). Until then the passwords live in NVS, written by `tools/provision_nvs.ps1`
-   (hidden prompts or `RMX_MQTT_PW` / `RMX_WEB_PW` / `RMX_OTA_PW`); plain-text copies only in the VPS
-   `credentials.txt` files. Before [#17](https://github.com/rmx-lt/rmx-mower-gateway/issues/17) they sat in the gitignored `sdkconfig`.
+3. **Secrets**: the board holds only its key and certificate chain (`creds/key`, `creds/chain`, `tools/provision_cert.ps1`); no passwords (issue 43). Before that they lived in NVS, written by `tools/provision_nvs.ps1`, and before [#17](https://github.com/rmx-lt/rmx-mower-gateway/issues/17) in the gitignored `sdkconfig`.
 4. Status / last will: `mower/<name>/status` (retained `online` / `offline`), the only
    status topic the ACL lets a device login write.
 5. Remote commands from the PC use the existing `app` login (no new VPS user).

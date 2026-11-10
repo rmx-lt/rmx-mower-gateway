@@ -90,11 +90,15 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(err);
     devcert_init();
-    ESP_LOGI(TAG, "booting as %s", creds_device_name());
-    if (!devcert_cn()) {
-        devcert_print_csr(creds_device_name());   /* tools/provision_cert.ps1 reads it */
-    }
     devcert_console_start();
+    if (!devcert_cn()) {
+        /* No identity, no connection: wait for tools/provision_cert.ps1 (RMX-CSR <name>, then the chain). */
+        for (;;) {
+            ESP_LOGE(TAG, "no client certificate: not connecting. Run tools/provision_cert.ps1 -Name <name>");
+            vTaskDelay(pdMS_TO_TICKS(30000));
+        }
+    }
+    ESP_LOGI(TAG, "booting as %s", creds_device_name());
     ota_boot_init();   /* a new image rolls back unless MQTT connects in time */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
