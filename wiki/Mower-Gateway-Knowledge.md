@@ -30,7 +30,7 @@ Server     https://api.rmx.lt/probe/…  ·  mqtts://mqtt.rmx.lt:8883 (login req
 Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain); SNI required for api.rmx.lt
 Proven     PPP → HTTPS 200 /probe/health → MQTTS CONNACK (fake login refused) — tools/ppp_smoke
 Firmware   main/ (repo root): login probe-device on MQTT + HTTPS, create/list both ways — verified
-Logins     MQTT probe-device, web probe-device; passwords only in NVS (tools/provision_nvs.ps1)
+Logins     device name in NVS (default probe-device) = MQTT + web + OTA login; passwords only in NVS (tools/provision_nvs.ps1 -Device)
 Commands   PC → mower/probe-device/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified
 OTA        `ota` command → api.rmx.lt/fw/probe/<ver>.bin, signed (RSA-3072, no Secure Boot), rollback — 0.2.0 → 0.2.1 over LTE verified 2026-10-22 (~3 min)
 GNSS       "gps": true on create/https_create; AT via esp_modem_pause_net (~2 s, links survive) — fix and no-fix verified

@@ -115,8 +115,8 @@ main/
   probe_proto.c/.h  JSON envelopes (espressif/cjson), request_id generation
   app_main.c        sequence: board → cell → https test → mqtt test → loop
 idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
-Kconfig.projbuild   APN, MQTT and HTTPS usernames (no passwords)
-creds.c/.h          passwords from NVS (namespace creds: mqtt_pw, web_pw, ota_pw)
+Kconfig.projbuild   APN, server URLs, default device name (no passwords)
+creds.c/.h          device name + passwords from NVS (namespace creds: device, mqtt_pw, web_pw, ota_pw)
 partitions.csv      16 MB layout with OTA slots
 ```
 
@@ -125,7 +125,7 @@ Start from [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mo
 MQTT client settings to start with:
 - `broker.address.uri = "mqtts://mqtt.rmx.lt:8883"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
   (or `certificate = <isrg-root-x1+x2 PEM>` to trust only those roots)
-- `credentials.username/password` from config; client id is forced to the username by the broker
+- `credentials.username/password` from NVS (username = device name); client id is forced to the username by the broker
 - `session.keepalive = 60`, `session.last_will` → `mower/probe-device/status` (the device login `probe-device` cannot write `probe/status/#`)
 - `buffer.size` ≥ 16–64 KB if the device sends `list`
 - QoS 1 for requests; match responses by `request_id`
@@ -139,9 +139,13 @@ MQTT client settings to start with:
 3. **Secrets**: the passwords live in the board's NVS (`creds` namespace), written by `tools/provision_nvs.ps1`
    (hidden prompts or `RMX_MQTT_PW` / `RMX_WEB_PW` / `RMX_OTA_PW`); plain-text copies only in the VPS
    `credentials.txt` files. Before [#17](https://github.com/rmx-lt/rmx-mower-gateway/issues/17) they sat in the gitignored `sdkconfig`.
-4. Status / last will: `mower/probe-device/status` (retained `online` / `offline`), the only
-   status topic the ACL lets `probe-device` write.
+4. Status / last will: `mower/<name>/status` (retained `online` / `offline`), the only
+   status topic the ACL lets a device login write.
 5. Remote commands from the PC use the existing `app` login (no new VPS user).
+6. **Identity in NVS** ([#36](https://github.com/rmx-lt/rmx-mower-gateway/issues/36)): the device name
+   (`creds/device`, default `probe-device`) sets every login and topic, so one image fits every board.
+   A second identity needs its own Mosquitto user + ACL on the VPS and its own web user; two boards on
+   one login kick each other off (client id = username).
 
 Open questions: modem firmware update B04 → B06 ([#20](https://github.com/rmx-lt/rmx-mower-gateway/issues/20)); whether the probe should
 exercise the real `mower/mower-01/…` topics ([#21](https://github.com/rmx-lt/rmx-mower-gateway/issues/21)).

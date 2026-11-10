@@ -12,6 +12,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "cell.h"
+#include "creds.h"
 #include "gnss.h"
 #include "https_api.h"
 #include "mqtt_link.h"
@@ -214,7 +215,7 @@ static void handle(const char *json, size_t len)
         add_gps_status(reply, fix, status);
     } else if (strcmp(name, "ping") == 0) {
         cJSON_AddBoolToObject(reply, "ok", true);
-        cJSON_AddStringToObject(cJSON_AddObjectToObject(reply, "result"), "pong", "probe-device");
+        cJSON_AddStringToObject(cJSON_AddObjectToObject(reply, "result"), "pong", creds_device_name());
     } else if (strcmp(name, "status") == 0) {
         add_status(reply);
     } else if (strcmp(name, "create") == 0) {
