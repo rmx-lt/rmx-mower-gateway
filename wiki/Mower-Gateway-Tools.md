@@ -1,15 +1,15 @@
-# Mower-Gateway-Probe-Tools: tools/
+# Mower-Gateway-Tools: tools/
 
 Diagnostic firmware and scripts for the LilyGo T-SIM7600. All were run on the real board.
 
 | Tool | What it does |
 |---|---|
-| [`at_bridge/`](https://github.com/rmx-lt/rmx-mower-gateway-probe/tree/development/tools/at_bridge) | ESP-IDF app: powers the modem with the board's pin sequence, then bridges USB console ⇄ modem UART (like LilyGo's ATdebug). |
-| [`at_session.py`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/tools/at_session.py) | Host script: resets the ESP, waits for `at_bridge`, sends AT commands, prints replies. |
-| [`serial_log.py`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/tools/serial_log.py) | Host script: resets the ESP and prints its log (`COM6 [seconds] [--until TEXT]`). |
-| [`mqtt_cmd.ps1`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/tools/mqtt_cmd.ps1) | Host script: sends a remote command to the probe firmware (`mower/<device>/cmd`, `-Device`, default `probe-device`; login `app`) and prints the reply from `…/cmd/ack`. |
-| [`provision_nvs.ps1`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/tools/provision_nvs.ps1) | Host script: writes the device name (`-Device`, default `probe-device`) and the MQTT / web / firmware-download passwords into the board's NVS (hidden prompts or `RMX_*_PW` env vars), without printing the passwords. Once per board, or to switch the board to another identity (no rebuild). Verified on hardware 2026-11-08: self-test passes with NVS credentials; with empty NVS it fails with a clear `creds` error, no crash. Verified 2026-11-10 (0.2.4 + PR #39): `-Device probe-device` → boot log `device name probe-device (from NVS)`, self-test passes, `ping` replies `pong: probe-device`. |
-| [`ppp_smoke/`](https://github.com/rmx-lt/rmx-mower-gateway-probe/tree/development/tools/ppp_smoke) | ESP-IDF app: esp_modem PPP → HTTPS GET `api.rmx.lt/probe/health` → MQTTS to `mqtt.rmx.lt:8883` with a fake login (expects CONNACK 5). The reference for the probe firmware. |
+| [`at_bridge/`](https://github.com/rmx-lt/rmx-mower-gateway/tree/development/tools/at_bridge) | ESP-IDF app: powers the modem with the board's pin sequence, then bridges USB console ⇄ modem UART (like LilyGo's ATdebug). |
+| [`at_session.py`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/at_session.py) | Host script: resets the ESP, waits for `at_bridge`, sends AT commands, prints replies. |
+| [`serial_log.py`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/serial_log.py) | Host script: resets the ESP and prints its log (`COM6 [seconds] [--until TEXT]`). |
+| [`mqtt_cmd.ps1`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/mqtt_cmd.ps1) | Host script: sends a remote command to the probe firmware (`mower/<device>/cmd`, `-Device`, default `probe-device`; login `app`) and prints the reply from `…/cmd/ack`. |
+| [`provision_nvs.ps1`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/provision_nvs.ps1) | Host script: writes the device name (`-Device`, default `probe-device`) and the MQTT / web / firmware-download passwords into the board's NVS (hidden prompts or `RMX_*_PW` env vars), without printing the passwords. Once per board, or to switch the board to another identity (no rebuild). Verified on hardware 2026-11-08: self-test passes with NVS credentials; with empty NVS it fails with a clear `creds` error, no crash. Verified 2026-11-10 (0.2.4 + PR #39): `-Device probe-device` → boot log `device name probe-device (from NVS)`, self-test passes, `ping` replies `pong: probe-device`. |
+| [`ppp_smoke/`](https://github.com/rmx-lt/rmx-mower-gateway/tree/development/tools/ppp_smoke) | ESP-IDF app: esp_modem PPP → HTTPS GET `api.rmx.lt/probe/health` → MQTTS to `mqtt.rmx.lt:8883` with a fake login (expects CONNACK 5). The reference for the probe firmware. |
 
 ## Build and flash (PowerShell)
 
@@ -35,7 +35,7 @@ $py = "C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe"
 Command prefixes: `wait=<ms>:` (timeout), `expect=<text>|` (wait for a URC such as
 `+CCHOPEN:` instead of `OK`), `raw:` (send bytes without CR; `\r\n` escapes),
 `rawfile:<path>` (send a file, e.g. a PEM after `AT+CCERTDOWN`). Example file for a
-verified TLS test: see [Mower-Gateway-Probe-SIM7600](Mower-Gateway-Probe-SIM7600).
+verified TLS test: see [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600).
 
 Bridge commands (type a line starting with `~`): `~status` (STATUS/RING/FLIGHT/DTR levels),
 `~pwr` (500 ms PWRKEY pulse — toggles power!), `~pwroff` (3 s), `~flight0`/`~flight1`, `~baud N`.

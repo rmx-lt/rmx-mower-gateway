@@ -1,15 +1,15 @@
-# rmx-mower-gateway-probe — notes for agents
+# rmx-mower-gateway — notes for agents
 
 Project-wide agent rules live in the meta repo's [CLAUDE.md](https://github.com/rmx-lt/blade-of-grass/blob/development/CLAUDE.md); read it first. This file only adds what is specific to this repo.
 
 Goal: ESP-IDF firmware on a LilyGo T-SIM7600 (ESP32 + SIM7600G-H) that reaches rmx-server over
-LTE and talks to rmx-server-app-probe with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
+LTE and talks to rmx-server-app with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
 (`api.rmx.lt/probe/…`).
 
-**Read `wiki/Mower-Gateway-Probe-Knowledge.md` first** (local, in this repo; online:
-https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Probe-Knowledge). It indexes
+**Read `wiki/Mower-Gateway-Knowledge.md` first** (local, in this repo; online:
+https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Knowledge). It indexes
 verified facts about the board, the modem, the ESP-IDF setup, esp_modem/PPP, and the server contract
-(pages `Mower-Gateway-Probe-*`). The probe firmware is in `main/` (verified on hardware); the minimal reference is
+(pages `Mower-Gateway-*`). The firmware is in `main/` (verified on hardware); the minimal reference is
 `tools/ppp_smoke/main/ppp_smoke.c`. Update the `wiki/` pages in the same PR when you learn something new or find a fact
 wrong (mark what you verified on hardware and when), per
 [Wiki-Policy](https://github.com/rmx-lt/blade-of-grass/blob/development/wiki/Wiki-Policy.md).
@@ -19,14 +19,14 @@ Work and open questions are GitHub issues in this repo, on the Blade of Grass pr
 
 Reusable board, chip and ESP-IDF knowledge also lives in the central hub `C:\Repos\esp-knowledge`
 (private repo `jRmx0/esp-knowledge`; read its `INDEX.md`). Its `boards/t-sim7600.md` has the header pinout and
-free GPIOs; put new board or chip facts there, and keep probe-specific knowledge in the wiki (`Mower-Gateway-Probe-*` pages).
+free GPIOs; put new board or chip facts there, and keep probe-specific knowledge in the wiki (`Mower-Gateway-*` pages).
 
 ## Environment
 
 - Windows, PowerShell primary. ESP-IDF v6.1: `. C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1`, then `idf.py`.
 - Two build paths: `idf.py` (reference) and PlatformIO (`~/.platformio/penv/Scripts/pio.exe run -e probe`; `platformio.ini`, pinned platform 7.1.0 = ESP-IDF 6.1.0). PlatformIO needs `keys/ota_signing_key.pem` (`sign_ota.py` signs the image) and writes `sdkconfig.probe` (gitignored, holds credentials).
 - Board on **COM6** (CH9102). Opening the port resets the ESP32 (not the modem).
-- No interactive `idf.py monitor` for agents: read the serial log with a pyserial script (see the wiki page `Mower-Gateway-Probe-Tools`).
+- No interactive `idf.py monitor` for agents: read the serial log with a pyserial script (see the wiki page `Mower-Gateway-Tools`).
 - Related repos: `C:\Repos\esp-knowledge`, `C:\Repos\LilyGo-Modem-Series`, `C:\Repos\esp-protocols`, `C:\esp\v6.1\esp-idf`,
   `C:\Projects\blade-of-grass\rmx-server\rmx-server-infra` (its `CLAUDE.md` has the VPS rules).
 

@@ -1,8 +1,8 @@
-# Mower-Gateway-Probe: rmx-mower-gateway-probe
+# Mower-Gateway: rmx-mower-gateway
 
-Part of **Blade of Grass** (open-source robotic mower). A learning/diagnostic firmware for
-the cellular link of the future rmx-mower: an ESP32 + SIM7600G-H board that connects over LTE
-to **rmx-server** and talks to **rmx-server-app-probe** with **MQTT over TLS** and **HTTPS**.
+Part of **Blade of Grass** (open-source robotic mower). Firmware for
+the cellular link of the rmx-mower: an ESP32 + SIM7600G-H board that connects over LTE
+to **rmx-server** and talks to **rmx-server-app** with **MQTT over TLS** and **HTTPS**.
 
 - Hardware: LilyGo T-SIM7600 (ESP32-WROVER-E N16R8, SIM7600G-H)
 - Framework: ESP-IDF v6.1, esp_modem (PPP), mbedTLS, esp-mqtt, esp_http_client
@@ -14,7 +14,7 @@ Probe firmware working on the hardware (2026-10-19): over LTE (PPP) it logs in t
 broker as `probe-device`, sends `create`/`list` on `probe/req/probe-device` and gets the
 answers on `probe/res/probe-device`; over HTTPS it logs in (session cookie + `Origin`)
 and creates/lists records. It also takes remote commands from the PC on
-`mower/probe-device/cmd` and replies on `…/cmd/ack`. Details: [Mower-Gateway-Probe-Plan](Mower-Gateway-Probe-Plan).
+`mower/probe-device/cmd` and replies on `…/cmd/ack`. Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
 
 ## Build, configure, flash (PowerShell)
 
@@ -34,7 +34,7 @@ switches the identity without a rebuild. The name is the MQTT, web and firmware-
 and the `<name>` in `probe/req|res/<name>` and `mower/<name>/…`; without a `device` key the board
 boots as `probe-device`. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
 
-TLS trusts only ISRG Root X1 + X2 ([`certs/rmx-ca-bundle.pem`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/certs/rmx-ca-bundle.pem)), not
+TLS trusts only ISRG Root X1 + X2 ([`certs/rmx-ca-bundle.pem`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/certs/rmx-ca-bundle.pem)), not
 ESP-IDF's full Mozilla bundle. An `sdkconfig` made before 0.2.3 still has the full bundle:
 in menuconfig, *Component config → mbedTLS → Certificate Bundle*, set *Default certificate
 bundle options* to *Use no default certificates bundle* and enable *Add custom certificates
@@ -65,7 +65,7 @@ Needs the Mosquitto clients for Windows and `ssh rmx-vps`.
 The device downloads a new image over HTTPS into the spare app slot (`partitions.csv`: two
 4 MB slots), checks it, boots it, and keeps it only if it reaches the MQTT broker within
 `CONFIG_PROBE_OTA_CONFIRM_S` (300 s). Otherwise the previous image boots again. Code:
-[`main/ota.c`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/main/ota.c).
+[`main/ota.c`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/main/ota.c).
 
 - **Signed images.** OTA images must be signed with our RSA-3072 key (Secure Boot V2 scheme,
   `CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`). The running firmware only accepts an update
@@ -117,4 +117,4 @@ certs/       ISRG Root X1/X2 PEMs (public CA roots for rmx.lt's Let's Encrypt ch
 
 ## License
 
-[Apache-2.0](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/LICENSE).
+[Apache-2.0](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/LICENSE).

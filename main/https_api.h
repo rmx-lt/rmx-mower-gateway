@@ -1,4 +1,4 @@
-/* HTTPS REST to rmx-server-app-probe: login (session cookie) and records CRUD.
+/* HTTPS REST to rmx-server-app: login (session cookie) and records CRUD.
  * One esp_http_client is kept open, so the TLS session is reused. */
 #pragma once
 

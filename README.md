@@ -1,13 +1,13 @@
-# rmx-mower-gateway-probe
+# rmx-mower-gateway
 
-Part of **Blade of Grass** (open-source robotic mower). A learning/diagnostic firmware for
-the cellular link of the future rmx-mower: an ESP32 + SIM7600G-H board (LilyGo T-SIM7600)
-that connects over LTE to **rmx-server** and talks to **rmx-server-app-probe** with
+Part of **Blade of Grass** (open-source robotic mower). Firmware for
+the cellular link of the rmx-mower: an ESP32 + SIM7600G-H board (LilyGo T-SIM7600)
+that connects over LTE to **rmx-server** and talks to **rmx-server-app** with
 **MQTT over TLS** and **HTTPS**. ESP-IDF v6.1, esp_modem (PPP), mbedTLS, esp-mqtt.
 
-- **Docs:** [Mower-Gateway-Probe](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Probe) on the wiki
+- **Docs:** [Mower-Gateway](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway) on the wiki
   (remote commands, OTA, error codes) and the
-  [knowledge index](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Probe-Knowledge)
+  [knowledge index](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Knowledge)
   (board, modem, ESP-IDF, PPP, server contract, plan). The pages live in this repo's `wiki/` folder;
   rules: [Wiki-Policy](https://github.com/rmx-lt/blade-of-grass/blob/development/wiki/Wiki-Policy.md).
 - **Work:** issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1).
@@ -33,7 +33,7 @@ boots as `probe-device`. `idf.py flash` and OTA leave NVS alone; `idf.py erase-f
 ## Layout
 
 ```
-main/        the probe firmware: board, cell (esp_modem PPP), mqtt_link, https_api, probe_proto, remote_cmd, gnss, ota
+main/        the firmware: board, cell (esp_modem PPP), mqtt_link, https_api, probe_proto, remote_cmd, gnss, ota
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
              mqtt_cmd.ps1 (remote commands), release.ps1 (signed OTA release)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release

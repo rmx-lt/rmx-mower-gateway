@@ -1,19 +1,19 @@
-# Mower-Gateway-Probe-Knowledge: Knowledge index — LilyGo T-SIM7600 + ESP-IDF + rmx-server
+# Mower-Gateway-Knowledge: Knowledge index — LilyGo T-SIM7600 + ESP-IDF + rmx-server
 
 Start here. Facts marked "verified" were measured on the real board on 2026-10-19.
 
-Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4 board) live in the private ESP knowledge hub `jRmx0/esp-knowledge` (local `C:\Repos\esp-knowledge`, read its `INDEX.md`). Put new board or chip facts there; probe-specific knowledge stays on these `Mower-Gateway-Probe-*` pages.
+Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4 board) live in the private ESP knowledge hub `jRmx0/esp-knowledge` (local `C:\Repos\esp-knowledge`, read its `INDEX.md`). Put new board or chip facts there; probe-specific knowledge stays on these `Mower-Gateway-*` pages.
 
 | # | Page | Read it when you need… |
 |---|---|---|
-| 01 | [Mower-Gateway-Probe-Board-Hardware](Mower-Gateway-Probe-Board-Hardware) | pins, DIP switch, power, antennas, flash/PSRAM size, flashing tips |
-| 02 | [Mower-Gateway-Probe-SIM7600](Mower-Gateway-Probe-SIM7600) | modem firmware, power sequence, registration, AT commands, modem-internal TLS/MQTT (verified) |
-| 03 | [Mower-Gateway-Probe-ESP-IDF-Environment](Mower-Gateway-Probe-ESP-IDF-Environment) | toolchain paths, build/flash commands, IDF v6 changes, sdkconfig for this board |
-| 04 | [Mower-Gateway-Probe-PPP](Mower-Gateway-Probe-PPP) | esp_modem + PPP: correct DTE config, startup sequence, CMUX, robustness |
-| 05 | [Mower-Gateway-Probe-Server-Contract](Mower-Gateway-Probe-Server-Contract) | endpoints, cert chain, Mosquitto ACL, probe MQTT/HTTPS protocol, cookie + Origin rules |
-| 06 | [Mower-Gateway-Probe-Plan](Mower-Gateway-Probe-Plan) | what is proven (incl. the probe firmware), firmware layout, decisions, risks |
-| — | [Mower-Gateway-Probe-Sources](Mower-Gateway-Probe-Sources) | where every fact came from (local repos, PDFs, web) |
-| — | [Mower-Gateway-Probe-Tools](Mower-Gateway-Probe-Tools) | AT bridge firmware, AT script, PPP smoke test |
+| 01 | [Mower-Gateway-Board-Hardware](Mower-Gateway-Board-Hardware) | pins, DIP switch, power, antennas, flash/PSRAM size, flashing tips |
+| 02 | [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600) | modem firmware, power sequence, registration, AT commands, modem-internal TLS/MQTT (verified) |
+| 03 | [Mower-Gateway-ESP-IDF-Environment](Mower-Gateway-ESP-IDF-Environment) | toolchain paths, build/flash commands, IDF v6 changes, sdkconfig for this board |
+| 04 | [Mower-Gateway-PPP](Mower-Gateway-PPP) | esp_modem + PPP: correct DTE config, startup sequence, CMUX, robustness |
+| 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, probe MQTT/HTTPS protocol, cookie + Origin rules |
+| 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the probe firmware), firmware layout, decisions, risks |
+| — | [Mower-Gateway-Sources](Mower-Gateway-Sources) | where every fact came from (local repos, PDFs, web) |
+| — | [Mower-Gateway-Tools](Mower-Gateway-Tools) | AT bridge firmware, AT script, PPP smoke test |
 
 ## Quick facts (cheat sheet)
 
@@ -43,4 +43,4 @@ GNSS       "gps": true on create/https_create; AT via esp_modem_pause_net (~2 s,
 | `C:\Repos\LilyGo-Modem-Series` | vendor repo: docs, schematic `schematic/esp32/T-SIM7600X-V1.3.pdf`, SIMCom PDFs in `datasheet/SIM7600X/`, Arduino examples (`examples/*/utilities.h` has pin maps), TinyGSM fork (`lib/TinyGSM/src/TinyGsmClientSIM7600.h`, `TinyGsmMqttA76xx.h`, `TinyGsmHttpsComm.h` = proven AT sequences) |
 | `C:\Repos\esp-protocols\components\esp_modem` | esp_modem source, docs (`docs/`), examples `pppos_client`, `simple_cmux_client`, `modem_console`, `modem_tcp_client` |
 | `C:\esp\v6.1\esp-idf` | ESP-IDF; cert bundle `components/mbedtls/esp_crt_bundle/cacrt_all.pem` |
-| `C:\Projects\blade-of-grass\rmx-server` | `CLAUDE.md`, `rmx-server-app-probe` (server code + protocol), `rmx-server-infra` (Caddy, Mosquitto config) |
+| `C:\Projects\blade-of-grass\rmx-server` | `CLAUDE.md`, `rmx-server-app` (server code + protocol), `rmx-server-infra` (Caddy, Mosquitto config) |

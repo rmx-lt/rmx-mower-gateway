@@ -1,9 +1,9 @@
-# Mower-Gateway-Probe-Plan: Plan for the probe firmware, risks, open questions
+# Mower-Gateway-Plan: Plan for the probe firmware, risks, open questions
 
 ## Goal
 
-`rmx-mower-gateway-probe`: ESP-IDF firmware on the T-SIM7600 that connects over LTE to
-rmx-server and talks to **rmx-server-app-probe** over **MQTT over TLS** (`mqtt.rmx.lt:8883`) and
+`rmx-mower-gateway`: ESP-IDF firmware on the T-SIM7600 that connects over LTE to
+rmx-server and talks to **rmx-server-app** over **MQTT over TLS** (`mqtt.rmx.lt:8883`) and
 **HTTPS** (`api.rmx.lt/probe/…`). It is the device-side rehearsal of the future rmx-mower link.
 
 ## What is already proven on the hardware (2026-10-19)
@@ -76,7 +76,7 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
 
 ### Firmware updates (OTA) — verified on the board 2026-10-22 (good update path)
 
-- `main/ota.c` + the `ota` command ([Mower-Gateway-Probe → Firmware updates](Mower-Gateway-Probe#firmware-updates-ota)): esp_https_ota from
+- `main/ota.c` + the `ota` command ([Mower-Gateway → Firmware updates](Mower-Gateway#firmware-updates-ota)): esp_https_ota from
   `https://api.rmx.lt/fw/probe/<version>.bin` (Caddy, basic auth), resumed with HTTP Range
   after a drop (3 retries), header check (project, version, not the running one), size check.
 - Rollback: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`. A new image confirms itself on the first
@@ -94,12 +94,12 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
   version 0.2.1, partition `ota_1`, confirmed true; ~3 min from command to confirmed. A second
   `ota -Version 0.2.1` → `same_version`. VPS: `/fw/` without login → 401.
 - Failure paths (bad image, crash on boot, link lost mid-download, wrong key, power cut) are not
-  verified on the board yet: [rmx-mower-gateway-probe#15](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/15).
+  verified on the board yet: [rmx-mower-gateway#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15).
 
 Open work is tracked as issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1):
-reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/16)),
-certificate date checks after SNTP ([#18](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/18)), CMUX / power saving / modem MQTT AT path ([#19](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/19)),
-OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/15)).
+reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway/issues/16)),
+certificate date checks after SNTP ([#18](https://github.com/rmx-lt/rmx-mower-gateway/issues/18)), CMUX / power saving / modem MQTT AT path ([#19](https://github.com/rmx-lt/rmx-mower-gateway/issues/19)),
+OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15)).
 
 ## Firmware structure (implemented)
 
@@ -120,7 +120,7 @@ creds.c/.h          device name + passwords from NVS (namespace creds: device, m
 partitions.csv      16 MB layout with OTA slots
 ```
 
-Start from [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/tools/ppp_smoke/main/ppp_smoke.c).
+Start from [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/ppp_smoke/main/ppp_smoke.c).
 
 MQTT client settings to start with:
 - `broker.address.uri = "mqtts://mqtt.rmx.lt:8883"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
@@ -138,17 +138,17 @@ MQTT client settings to start with:
 2. **HTTPS login**: a dedicated web user **`probe-device`** (`probe-server create-user`).
 3. **Secrets**: the passwords live in the board's NVS (`creds` namespace), written by `tools/provision_nvs.ps1`
    (hidden prompts or `RMX_MQTT_PW` / `RMX_WEB_PW` / `RMX_OTA_PW`); plain-text copies only in the VPS
-   `credentials.txt` files. Before [#17](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/17) they sat in the gitignored `sdkconfig`.
+   `credentials.txt` files. Before [#17](https://github.com/rmx-lt/rmx-mower-gateway/issues/17) they sat in the gitignored `sdkconfig`.
 4. Status / last will: `mower/<name>/status` (retained `online` / `offline`), the only
    status topic the ACL lets a device login write.
 5. Remote commands from the PC use the existing `app` login (no new VPS user).
-6. **Identity in NVS** ([#36](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/36)): the device name
+6. **Identity in NVS** ([#36](https://github.com/rmx-lt/rmx-mower-gateway/issues/36)): the device name
    (`creds/device`, default `probe-device`) sets every login and topic, so one image fits every board.
    A second identity needs its own Mosquitto user + ACL on the VPS and its own web user; two boards on
    one login kick each other off (client id = username).
 
-Open questions: modem firmware update B04 → B06 ([#20](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/20)); whether the probe should
-exercise the real `mower/mower-01/…` topics ([#21](https://github.com/rmx-lt/rmx-mower-gateway-probe/issues/21)).
+Open questions: modem firmware update B04 → B06 ([#20](https://github.com/rmx-lt/rmx-mower-gateway/issues/20)); whether the probe should
+exercise the real `mower/mower-01/…` topics ([#21](https://github.com/rmx-lt/rmx-mower-gateway/issues/21)).
 
 ## Risks / gotchas to remember
 

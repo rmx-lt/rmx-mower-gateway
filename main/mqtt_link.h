@@ -1,4 +1,4 @@
-/* MQTT over TLS to Mosquitto: request/response with rmx-server-app-probe. */
+/* MQTT over TLS to Mosquitto: request/response with rmx-server-app. */
 #pragma once
 
 #include <stdbool.h>
