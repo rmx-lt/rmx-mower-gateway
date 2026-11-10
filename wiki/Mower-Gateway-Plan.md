@@ -14,6 +14,7 @@ has no HTTPS client.
 - [x] SIM ready, LTE registration on Tele2 LT (APN `internet`)
 - [x] PPP with esp_modem 2.1.0 on ESP-IDF v6.1, IP in ~160 ms after dial
 - [x] HTTPS GET `/probe/health` → 200, mbedTLS + cert bundle verification
+- [x] Client certificate (issue 43): key generation, CSR, chain write/clear and password fallback verified on the board 2026-11-10; image +12 KB flash (741376 bytes signed), +0.5 KB static RAM. Open: live login on 8884 with the real CA, then drop `mqtt_pw` and `provision_nvs.ps1`.
 - [x] MQTTS TLS handshake to 8883 + MQTT CONNECT reaches Mosquitto (fake login → CONNACK 5)
 - [x] Recovery after an ESP reset while the modem is in PPP
 - [x] Fallback: modem-internal TLS (AT+CCH*) with CA verification to both hosts
@@ -129,7 +130,8 @@ main/
   app_main.c        sequence: board → cell → mqtt test → loop
 idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
 Kconfig.projbuild   APN, server URL, default device name (no passwords)
-creds.c/.h          device name + MQTT password from NVS (namespace creds: device, mqtt_pw)
+creds.c/.h          device name (certificate CN, else NVS device) + MQTT password from NVS (creds: device, mqtt_pw)
+devcert.c/.h        P-256 key + CSR + certificate chain in NVS (creds: key, chain), serial provisioning commands
 partitions.csv      16 MB layout with OTA slots
 ```
 
@@ -150,7 +152,7 @@ MQTT client settings to start with:
    `probe-device-login`). ACL: write `probe/req/probe-device`; read `probe/res/probe-device`,
    `probe/events/#`, `probe/status/#` (plus the `mower/probe-device/#` pattern every login gets).
 2. **HTTPS login**: a dedicated web user **`probe-device`** (`probe-server create-user`).
-3. **Secrets**: the passwords live in the board's NVS (`creds` namespace), written by `tools/provision_nvs.ps1`
+3. **Secrets**: the board's key and certificate chain (`creds/key`, `creds/chain`, `tools/provision_cert.ps1`) replace the passwords (issue 43; `mqtt_pw` stays as fallback until the live switch). Until then the passwords live in NVS, written by `tools/provision_nvs.ps1`
    (hidden prompts or `RMX_MQTT_PW` / `RMX_WEB_PW` / `RMX_OTA_PW`); plain-text copies only in the VPS
    `credentials.txt` files. Before [#17](https://github.com/rmx-lt/rmx-mower-gateway/issues/17) they sat in the gitignored `sdkconfig`.
 4. Status / last will: `mower/<name>/status` (retained `online` / `offline`), the only

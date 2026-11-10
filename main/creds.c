@@ -1,7 +1,9 @@
 #include "creds.h"
+#include "devcert.h"
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include "esp_log.h"
 #include "nvs.h"
 #include "sdkconfig.h"
@@ -55,6 +57,17 @@ const char *creds_device_name(void)
 {
     static char s_name[CREDS_DEVICE_MAX + 1];
     if (s_name[0]) {
+        return s_name;
+    }
+    /* A client certificate decides the name: the broker takes the identity from its CN. */
+    const char *cn = devcert_cn();
+    if (cn) {
+        snprintf(s_name, sizeof(s_name), "%s", cn);
+        char nvs_name[CREDS_DEVICE_MAX + 1];
+        if (read_str(CREDS_DEVICE, nvs_name, sizeof(nvs_name)) == ESP_OK && strcmp(nvs_name, cn) != 0) {
+            ESP_LOGW(TAG, "NVS '%s' (%s) differs from the certificate CN, using the CN", CREDS_DEVICE, nvs_name);
+        }
+        ESP_LOGI(TAG, "device name %s (from the client certificate)", s_name);
         return s_name;
     }
     esp_err_t err = read_str(CREDS_DEVICE, s_name, sizeof(s_name));

@@ -1,5 +1,6 @@
 #include "mqtt_link.h"
 #include "creds.h"
+#include "devcert.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -187,9 +188,15 @@ void mqtt_link_set_fw_handler(mqtt_link_fw_cb_t cb)
 
 esp_err_t mqtt_link_start(void)
 {
-    esp_err_t err = creds_get(CREDS_MQTT_PW, s_password, sizeof(s_password));
-    if (err != ESP_OK) {
-        return err;
+    /* Client certificate on its own port when the board has one, else the password login. */
+    const char *chain = devcert_chain_pem();
+    const char *key = devcert_key_pem();
+    bool use_cert = chain && key;
+    if (!use_cert) {
+        esp_err_t err = creds_get(CREDS_MQTT_PW, s_password, sizeof(s_password));
+        if (err != ESP_OK) {
+            return err;
+        }
     }
     s_ev = xEventGroupCreate();
     s_req_lock = xSemaphoreCreateMutex();
@@ -204,11 +211,13 @@ esp_err_t mqtt_link_start(void)
     snprintf(s_fw_res_topic, sizeof(s_fw_res_topic), "mower/%s/fw/res", name);
 
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri = CONFIG_PROBE_MQTT_URI,
+        .broker.address.uri = use_cert ? CONFIG_PROBE_MQTT_CERT_URI : CONFIG_PROBE_MQTT_URI,
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
         .credentials.username = name,
         .credentials.client_id = name,   /* the broker forces it anyway */
-        .credentials.authentication.password = s_password,
+        .credentials.authentication.password = use_cert ? NULL : s_password,
+        .credentials.authentication.certificate = use_cert ? chain : NULL,   /* PEM, NUL-terminated */
+        .credentials.authentication.key = use_cert ? key : NULL,
         .session.keepalive = 60,                  /* below typical CGNAT idle timeouts */
         .session.message_retransmit_timeout = 10000,   /* LTE round trips + TLS */
         .session.last_will = {
@@ -227,6 +236,7 @@ esp_err_t mqtt_link_start(void)
         .buffer.out_size = 2048,
         .task.stack_size = 8192,
     };
+    ESP_LOGI(TAG, "login: %s", use_cert ? "client certificate" : "password");
     s_client = esp_mqtt_client_init(&cfg);
     if (!s_client) {
         return ESP_FAIL;

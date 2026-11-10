@@ -22,6 +22,7 @@
 #include "board.h"
 #include "cell.h"
 #include "creds.h"
+#include "devcert.h"
 #include "gnss.h"
 #include "mqtt_link.h"
 #include "ota.h"
@@ -88,7 +89,12 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+    devcert_init();
     ESP_LOGI(TAG, "booting as %s", creds_device_name());
+    if (!devcert_cn()) {
+        devcert_print_csr(creds_device_name());   /* tools/provision_cert.ps1 reads it */
+    }
+    devcert_console_start();
     ota_boot_init();   /* a new image rolls back unless MQTT connects in time */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

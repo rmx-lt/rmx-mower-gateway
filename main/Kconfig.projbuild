@@ -1,6 +1,6 @@
 menu "rmx probe"
 
-    comment "Passwords and the device name live in NVS (tools/provision_nvs.ps1)."
+    comment "The key and certificate live in NVS (tools/provision_cert.ps1); until a certificate is stored the device name and password come from tools/provision_nvs.ps1."
 
     config PROBE_DEVICE_NAME
         string "Default device name (used when NVS has none)"
@@ -19,6 +19,13 @@ menu "rmx probe"
     config PROBE_MQTT_URI
         string "MQTT broker URI"
         default "mqtts://mqtt.rmx.lt:8883"
+
+    config PROBE_MQTT_CERT_URI
+        string "MQTT broker URI for the client certificate login"
+        default "mqtts://mqtt.rmx.lt:8884"
+        help
+            Used instead of PROBE_MQTT_URI when NVS holds a client certificate.
+            No password is sent; the broker takes the identity from the CN.
 
     config PROBE_HEARTBEAT_S
         int "Seconds between MQTT create requests after the self-test (0 = off)"
