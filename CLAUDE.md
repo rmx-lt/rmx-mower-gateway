@@ -3,8 +3,8 @@
 Project-wide agent rules live in the meta repo's [CLAUDE.md](https://github.com/rmx-lt/blade-of-grass/blob/development/CLAUDE.md); read it first. This file only adds what is specific to this repo.
 
 Goal: ESP-IDF firmware on a LilyGo T-SIM7600 (ESP32 + SIM7600G-H) that reaches rmx-server over
-LTE and talks to rmx-server-app with MQTT over TLS (`mqtt.rmx.lt:8883`) and HTTPS
-(`api.rmx.lt/probe/…`).
+LTE and talks to rmx-server-app with MQTT over TLS (`mqtt.rmx.lt:8883`), including firmware
+download. The firmware has no HTTPS client.
 
 **Read `wiki/Mower-Gateway-Knowledge.md` first** (local, in this repo; online:
 https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway-Knowledge). It indexes
@@ -36,7 +36,7 @@ free GPIOs; put new board or chip facts there, and keep probe-specific knowledge
 - FLIGHT (GPIO25) HIGH, DTR (GPIO32) LOW. PWRKEY (GPIO4) HIGH 500 ms toggles power: send `AT` first.
 - MQTT and cJSON are not in ESP-IDF v6: use `espressif/mqtt`, `espressif/cjson`.
 - Broker forces client id = username; ACL limits each login to its topics. Forbidden SUB/PUB fail silently.
-- HTTPS API needs `Origin: https://api.rmx.lt` on non-GET requests and a manually handled session cookie.
+- Firmware chunks are about 4 KB. `mqtt_link` sets the esp-mqtt receive buffer to 8192 bytes and still reassembles `MQTT_EVENT_DATA` fragments.
 
 ## Rules
 

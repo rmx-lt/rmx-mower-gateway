@@ -98,6 +98,9 @@ HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
 | `mower/<client-id>/res` | server → client | response envelope |
 | `mower/events/records` | server → all | change event |
 | `mower/status/server` | server → all, **retained** | `online` / `offline` (server's LWT) |
+| `mower/<client-id>/fw/req` | client → server | firmware request (JSON) |
+| `mower/<client-id>/fw/chunk` | server → client | one firmware chunk (binary) |
+| `mower/<client-id>/fw/res` | server → client | firmware info, or a JSON error |
 
 - The server subscribes `mower/+/req` (QoS 1), answers on `mower/<same id>/res` (QoS 1).
   Client id: 1–64 chars `[A-Za-z0-9_-]`; `events` and `status` are reserved (shared topics).
@@ -128,35 +131,45 @@ HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
 - Events: `{"op":"create","record":{…}}`, `{"op":"update","record":{…}}`,
   `{"op":"delete","id":7,"connection_type":"mqtt"}`.
 
-### HTTPS REST
+## Firmware over MQTT
 
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/probe/health` | — | public; 200/503 `{"status","db","mqtt","version"}` |
-| POST | `/probe/api/auth/login` | `{"username","password"}` | 200 `{"username"}` + `Set-Cookie`; 401; 429 + `Retry-After` |
-| GET | `/probe/api/records` | — | `RecordRow[]` (newest 500) |
-| POST | `/probe/api/records` | `{"value": string\|null}` | 201 `RecordRow` |
-| PUT | `/probe/api/records/{id}` | `{"value": …}` | 200 / 404 |
-| DELETE | `/probe/api/records/{id}` | — | 204 / 404 |
-| GET | `/probe/api/auth/me` | — | 200 / 401 |
-| POST | `/probe/api/auth/logout` | — | 204 |
+The device downloads a signed `*.bin` as binary chunks on the MQTT connection it already
+has. The file name is the same last segment Caddy serves
+(`https://api.rmx.lt/fw/probe/<version>.bin` → file `<version>.bin`). The device does not
+open that URL. The byte layout, request JSON, error codes and chunk size are the contract
+in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway does with it:
 
-Device rules for HTTPS (the API was built for browsers):
-1. **Login** with a web user (created on the VPS with `probe-server create-user …`; the user
-   provides the credentials). Response header:
-   `Set-Cookie: __Secure-probe_session=<64 hex>; Path=/probe; Max-Age=2592000; HttpOnly; Secure; SameSite=Strict`.
-   esp_http_client does **not** keep cookies: read the header in `HTTP_EVENT_ON_HEADER`
-   and send `Cookie: __Secure-probe_session=<token>` yourself on later requests.
-2. **Origin header**: every non-GET request (including login) must carry exactly one
-   `Origin` from the server's `ALLOWED_ORIGINS` (`https://api.rmx.lt`) or it gets 403.
-   Add `Origin: https://api.rmx.lt` on POST/PUT/DELETE.
-3. Send the cookie only once (a duplicated cookie name counts as logged out).
-4. Sessions: idle timeout 7 days (sliding), absolute 30 days. Logging in on every boot is
-   fine, but failed logins back off (5 free failures per username, 20 per IP, then 1 s … 15 min;
-   all devices on a carrier CGNAT may share an IP).
-5. `Content-Type: application/json` for bodies. Errors come as `{"code","message"}`.
-6. The device's web user is `probe-device` (created 2026-10-19; NVS key `https_user`, independent of the device name). Verified on hardware:
-   login → 200 `{"username":"probe-device"}` + cookie, create → 201, list → 200.
-   Records also carry `created_ip` (the client's public IP for REST; `null` over MQTT).
-7. Server records the transport: HTTPS-created rows have `connection_type: "https"`,
-   MQTT ones `"mqtt"`. That's how the probe shows which path the device used.
+1. The `ota` command carries `version` and optional `file` (default `<version>.bin`) and
+   optional `size`. Code: `main/ota.c`, command handling in `main/remote_cmd.c`.
+2. The device publishes one JSON request at a time on `mower/<name>/fw/req`
+   (`request_id`, `op` `chunk`, `file`, `chunk`). QoS 1, not retained.
+3. It subscribes to `mower/<name>/fw/chunk` and `mower/<name>/fw/res` on every connect.
+   A chunk is a 64-byte little-endian header (`RMFW`, version 1, index, count, image size,
+   chunk length, request-id hash, whole-image SHA-256) plus the raw bytes. Info and errors
+   are JSON on `fw/res`.
+4. esp-mqtt `buffer.size` is **8192**, so a default 4096-byte chunk plus the 64-byte header
+   arrives as one `MQTT_EVENT_DATA`. `on_data` still reassembles a frame that is split
+   (`current_data_offset` / `total_data_len`), up to 128 KB.
+5. The device rejects a frame whose magic, version, flags, header length, reserved field or
+   length do not match, or whose request-id hash is not the first 8 bytes of SHA-256 over
+   the request id it sent. It writes the payload with `esp_ota_begin` / `esp_ota_write`.
+6. After the app-description bytes are in the slot it checks project name, version (must
+   equal the command) and that the version is not the one already running. `size` on the
+   command, when set, must equal the image size in the header.
+7. It hashes every payload byte and compares the digest to the header SHA-256. Then
+   `esp_ota_end` checks the image, which includes the RSA-3072 signature
+   (`CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`). Only then
+   `esp_ota_set_boot_partition`.
+8. A chunk timeout retries that same chunk (same request id, 4 tries, 45 s each). Bytes
+   already written stay, so the next index resumes the download. A board reset loses that
+   progress; the next `ota` command starts at chunk 0. The running image is unchanged until
+   step 7 succeeds.
+9. When `FIRMWARE_DIR` is unset the server does not subscribe to `fw/req`, so a request gets
+   no answer (`download_failed`). A JSON error `firmware is not configured` is the same fact
+   if a request is still dispatched.
+
+### HTTPS
+
+Browsers still use `https://api.rmx.lt/probe/…` (wiki [Server-App](Server-App)). The gateway
+firmware does not. `tools/ppp_smoke` still does one GET `/probe/health` as a pipe check.
+NVS holds no web or firmware-download password.

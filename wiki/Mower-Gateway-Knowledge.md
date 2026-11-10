@@ -10,7 +10,7 @@ Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4
 | 02 | [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600) | modem firmware, power sequence, registration, AT commands, modem-internal TLS/MQTT (verified) |
 | 03 | [Mower-Gateway-ESP-IDF-Environment](Mower-Gateway-ESP-IDF-Environment) | toolchain paths, build/flash commands, IDF v6 changes, sdkconfig for this board |
 | 04 | [Mower-Gateway-PPP](Mower-Gateway-PPP) | esp_modem + PPP: correct DTE config, startup sequence, CMUX, robustness |
-| 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, probe MQTT/HTTPS protocol, cookie + Origin rules |
+| 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, probe MQTT protocol, firmware chunks |
 | 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the probe firmware), firmware layout, decisions, risks |
 | — | [Mower-Gateway-Sources](Mower-Gateway-Sources) | where every fact came from (local repos, PDFs, web) |
 | — | [Mower-Gateway-Tools](Mower-Gateway-Tools) | AT bridge firmware, AT script, PPP smoke test |
@@ -25,15 +25,15 @@ Control    PWRKEY GPIO4 (HIGH 500 ms = on/off toggle), FLIGHT GPIO25 = HIGH, DTR
            RI GPIO33 (in), STATUS GPIO34 (in, 1 = on), LED GPIO12
 PC         COM6 (CH9102); ESP-IDF v6.1: . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 SIM/APN    Tele2 LT "PILDYK", APN "internet", LTE band 1, CGNAT IP
-Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqtt + esp_http_client
-Server     https://api.rmx.lt/probe/…  ·  mqtts://mqtt.rmx.lt:8883 (login required, client id := username)
-Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain); SNI required for api.rmx.lt
-Proven     PPP → HTTPS 200 /probe/health → MQTTS CONNACK (fake login refused) — tools/ppp_smoke
-Firmware   main/ (repo root): MQTT login mower-01 on mower/<name>/req|res (HTTPS user probe-device), create/list both ways — verified as probe-device on probe/ topics 2026-10; the mower-01 / mower/ switch (issue 53) is not yet verified on hardware
-Logins     device name in NVS (default mower-01) = MQTT login + topic name; HTTPS user in NVS (https_user, default probe-device) = web + OTA login; passwords only in NVS (tools/provision_nvs.ps1 -Device -HttpsUser)
+Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqtt
+Server     mqtts://mqtt.rmx.lt:8883 (login required, client id := username). Firmware files are the same *.bin names as /fw/probe/, served as MQTT chunks.
+Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain)
+Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /probe/health; the gateway firmware does not.
+Firmware   main/ (repo root): MQTT login from NVS (default mower-01) on mower/<name>/req|res and mower/<name>/fw/…
+Logins     device name in NVS (default mower-01) = MQTT login + topic name; password only mqtt_pw (tools/provision_nvs.ps1 -Device)
 Commands   PC → mower/<name>/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified
-OTA        `ota` command → api.rmx.lt/fw/probe/<ver>.bin, signed (RSA-3072, no Secure Boot), rollback — 0.2.0 → 0.2.1 over LTE verified 2026-10-22 (~3 min)
-GNSS       "gps": true on create/https_create; AT via esp_modem_pause_net (~2 s, links survive) — fix and no-fix verified
+OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. Verified 2026-11-10: 0.3.0 USB flash, unknown file `not_found`, reset at 10% then clean retry, 0.3.1 confirmed on ota_1 (97 s, 729088 bytes).
+GNSS       "gps": true on create; AT via esp_modem_pause_net (~2 s, links survive) — fix and no-fix verified
 ```
 
 ## Local reference material

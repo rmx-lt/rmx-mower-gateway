@@ -8,8 +8,7 @@ menu "rmx probe"
         help
             Used only when NVS has no creds/device key. The name is the MQTT
             username and client id (on 8883 the broker forces client id =
-            username) and the <name> in mower/<name>/req|res|cmd|ack|status.
-            The HTTPS login is separate (NVS creds/https_user, default probe-device).
+            username) and the <name> in mower/<name>/req|res|cmd|ack|status|fw.
 
     config PROBE_APN
         string "Cellular APN"
@@ -21,25 +20,10 @@ menu "rmx probe"
         string "MQTT broker URI"
         default "mqtts://mqtt.rmx.lt:8883"
 
-    config PROBE_API_BASE
-        string "Probe HTTPS API base URL"
-        default "https://api.rmx.lt/probe"
-
-    config PROBE_API_ORIGIN
-        string "Origin header for non-GET requests"
-        default "https://api.rmx.lt"
-
     config PROBE_HEARTBEAT_S
         int "Seconds between MQTT create requests after the self-test (0 = off)"
         default 0
         range 0 86400
-
-    config PROBE_OTA_URL_PREFIX
-        string "Firmware updates: allowed URL prefix"
-        default "https://api.rmx.lt/fw/"
-        help
-            The ota command is refused for any other URL. The image itself
-            must also be signed with our key (see the wiki page Mower-Gateway, "Firmware updates").
 
     config PROBE_OTA_CONFIRM_S
         int "Seconds a new image has to reach MQTT before it rolls back"
