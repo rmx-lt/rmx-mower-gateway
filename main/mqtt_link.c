@@ -60,7 +60,7 @@ static void handle_message(const char *topic, const char *data, size_t len)
         } else {
             ESP_LOGW(TAG, "response for unknown request_id %s", r.request_id);
         }
-    } else if (strncmp(topic, "probe/events/", 13) == 0) {
+    } else if (strncmp(topic, "mower/events/", 13) == 0) {
         ESP_LOGI(TAG, "event on %s: %.*s", topic, len > 200 ? 200 : (int)len, data);
     } else {
         ESP_LOGI(TAG, "%s: %.*s", topic, len > 200 ? 200 : (int)len, data);
@@ -112,8 +112,8 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
                  (esp_timer_get_time() - s_connect_started_us) / 1000, e->session_present);
         xEventGroupSetBits(s_ev, CONNECTED);
         s_res_sub_msg_id = esp_mqtt_client_subscribe_single(s_client, s_res_topic, 1);
-        esp_mqtt_client_subscribe_single(s_client, "probe/events/records", 0);
-        esp_mqtt_client_subscribe_single(s_client, "probe/status/server", 1);
+        esp_mqtt_client_subscribe_single(s_client, "mower/events/records", 0);
+        esp_mqtt_client_subscribe_single(s_client, "mower/status/server", 1);
         if (s_cmd_cb) {
             esp_mqtt_client_subscribe_single(s_client, s_cmd_topic, 1);
         }
@@ -161,8 +161,8 @@ esp_err_t mqtt_link_start(void)
     s_ev = xEventGroupCreate();
     s_req_lock = xSemaphoreCreateMutex();
     const char *name = creds_device_name();
-    snprintf(s_req_topic, sizeof(s_req_topic), "probe/req/%s", name);
-    snprintf(s_res_topic, sizeof(s_res_topic), "probe/res/%s", name);
+    snprintf(s_req_topic, sizeof(s_req_topic), "mower/%s/req", name);
+    snprintf(s_res_topic, sizeof(s_res_topic), "mower/%s/res", name);
     snprintf(s_cmd_topic, sizeof(s_cmd_topic), "mower/%s/cmd", name);
     snprintf(s_ack_topic, sizeof(s_ack_topic), "mower/%s/cmd/ack", name);
     snprintf(s_status_topic, sizeof(s_status_topic), "mower/%s/status", name);

@@ -60,10 +60,11 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 - ACL:
   - `pattern readwrite mower/%u/#` — **every login** may use only `mower/<its username>/#`.
   - `user app` → `mower/#` (backend).
-  - `user probe-app` → `probe/#` (probe server).
-  - `user probe-device` → write `probe/req/probe-device`,
+  - `pattern read mower/events/#` and `pattern read mower/status/server` — every login may read the shared server topics.
+  - `user probe-app` → `mower/#` (probe server; plus legacy `probe/#` until the switch is done).
+  - `user probe-device` → legacy, to be removed: write `probe/req/probe-device`,
     read `probe/res/probe-device`, `probe/events/#`, `probe/status/#`.
-- Logins that exist: `app`, `mower-01`, `probe-app`, `probe-device`. Passwords live only on the
+- Logins that exist: `app`, `mower-01`, `probe-app`, `probe-device` (legacy). Passwords live only on the
   server (`services/mosquitto/data/credentials.txt`, root 0600). **Never print or commit them.**
   The user must provide the device's password (into NVS with `tools/provision_nvs.ps1`, not committed).
 - Mosquitto accepts a SUBSCRIBE to a forbidden topic but never delivers to it (no error!).
@@ -81,7 +82,7 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 
 Safety: the mower stops on its own when the link or acks are lost; never rely on the server.
 
-The probe device already uses `mower/probe-device/cmd` → `…/cmd/ack` and `…/status`
+The gateway already uses `mower/<name>/cmd` → `…/cmd/ack` and `…/status`
 (format in [06](Mower-Gateway-Plan), "Remote commands").
 
 ## rmx-server-app protocol (the probe target)
@@ -89,18 +90,18 @@ The probe device already uses `mower/probe-device/cmd` → `…/cmd/ack` and `�
 The probe server is a CRUD demo on a `records(time, connection_type, value)` table, over
 HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
 
-### MQTT (topic prefix `probe`)
+### MQTT (topic prefix `mower`; moved from `probe/` by issue 53, 2026-11, hardware test pending)
 
 | Topic | Direction | Payload |
 |---|---|---|
-| `probe/req/<client-id>` | client → server | request envelope (JSON) |
-| `probe/res/<client-id>` | server → client | response envelope |
-| `probe/events/records` | server → all | change event |
-| `probe/status/server` | server → all, **retained** | `online` / `offline` (server's LWT) |
+| `mower/<client-id>/req` | client → server | request envelope (JSON) |
+| `mower/<client-id>/res` | server → client | response envelope |
+| `mower/events/records` | server → all | change event |
+| `mower/status/server` | server → all, **retained** | `online` / `offline` (server's LWT) |
 
-- The server subscribes `probe/req/+` (QoS 1), answers on `probe/res/<same id>` (QoS 1).
-  Client id: 1–64 chars `[A-Za-z0-9_-]`.
-- **Which login can a device use?** `probe-device`. On 8883 the client id is forced to the username, so the device publishes on `probe/req/probe-device` and subscribes `probe/res/probe-device`, `probe/events/records`, `probe/status/server`. `mower-01` cannot reach `probe/#`. `probe-app` is the server's login, not a device's.
+- The server subscribes `mower/+/req` (QoS 1), answers on `mower/<same id>/res` (QoS 1).
+  Client id: 1–64 chars `[A-Za-z0-9_-]`; `events` and `status` are reserved (shared topics).
+- **Which login can a device use?** Its own, e.g. `mower-01`. On 8883 the client id is forced to the username, so the device publishes on `mower/mower-01/req` and subscribes `mower/mower-01/res`, `mower/events/records`, `mower/status/server` (the first two covered by `pattern readwrite mower/%u/#`, the shared ones by the `pattern read` rules). The old `probe-device` login only reached `probe/…` topics. `probe-app` is the server's login, not a device's.
 - Requests (`internal/protocol` in rmx-server-app):
 
 ```jsonc
@@ -154,7 +155,7 @@ Device rules for HTTPS (the API was built for browsers):
    fine, but failed logins back off (5 free failures per username, 20 per IP, then 1 s … 15 min;
    all devices on a carrier CGNAT may share an IP).
 5. `Content-Type: application/json` for bodies. Errors come as `{"code","message"}`.
-6. The device's web user is `probe-device` (created 2026-10-19). Verified on hardware:
+6. The device's web user is `probe-device` (created 2026-10-19; NVS key `https_user`, independent of the device name). Verified on hardware:
    login → 200 `{"username":"probe-device"}` + cookie, create → 201, list → 200.
    Records also carry `created_ip` (the client's public IP for REST; `null` over MQTT).
 7. Server records the transport: HTTPS-created rows have `connection_type: "https"`,

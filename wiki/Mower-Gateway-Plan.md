@@ -126,7 +126,7 @@ MQTT client settings to start with:
 - `broker.address.uri = "mqtts://mqtt.rmx.lt:8883"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
   (or `certificate = <isrg-root-x1+x2 PEM>` to trust only those roots)
 - `credentials.username/password` from NVS (username = device name); client id is forced to the username by the broker
-- `session.keepalive = 60`, `session.last_will` → `mower/probe-device/status` (the device login `probe-device` cannot write `probe/status/#`)
+- `session.keepalive = 60`, `session.last_will` → `mower/probe-device/status` (the old device login `probe-device` could not write `probe/status/#`; `mower-01` owns `mower/mower-01/#`)
 - `buffer.size` ≥ 16–64 KB if the device sends `list`
 - QoS 1 for requests; match responses by `request_id`
 
