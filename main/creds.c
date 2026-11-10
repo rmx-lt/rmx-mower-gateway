@@ -51,19 +51,6 @@ static bool valid_name(const char *s)
     return true;
 }
 
-const char *creds_https_user(void)
-{
-    static char s_user[CREDS_DEVICE_MAX + 1];
-    if (s_user[0]) {
-        return s_user;
-    }
-    esp_err_t err = read_str(CREDS_HTTPS_USER, s_user, sizeof(s_user));
-    if (err != ESP_OK || !valid_name(s_user)) {
-        snprintf(s_user, sizeof(s_user), "probe-device");
-    }
-    return s_user;
-}
-
 const char *creds_device_name(void)
 {
     static char s_name[CREDS_DEVICE_MAX + 1];

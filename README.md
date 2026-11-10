@@ -3,7 +3,7 @@
 Part of **Blade of Grass** (open-source robotic mower). Firmware for
 the cellular link of the rmx-mower: an ESP32 + SIM7600G-H board (LilyGo T-SIM7600)
 that connects over LTE to **rmx-server** and talks to **rmx-server-app** with
-**MQTT over TLS** and **HTTPS**. ESP-IDF v6.1, esp_modem (PPP), mbedTLS, esp-mqtt.
+**MQTT over TLS**. ESP-IDF v6.1, esp_modem (PPP), mbedTLS, esp-mqtt.
 
 - **Docs:** [Mower-Gateway](https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Gateway) on the wiki
   (remote commands, OTA, error codes) and the
@@ -24,16 +24,16 @@ tools\provision_nvs.ps1      # once per board: device name + passwords go to NVS
 python -I -u tools\serial_log.py COM6 120 --until SELF-TEST
 ```
 
-The device name and the passwords (MQTT, web, firmware download) live only in the board's NVS
-partition (`creds` namespace), so one image fits every board: `tools\provision_nvs.ps1 -Device <name>`
-switches the identity without a rebuild. The name is the MQTT login and the `<name>` in
-`mower/<name>/…`; without a `device` key the board boots as `mower-01`. The legacy HTTPS login
-(web and firmware download) is the separate NVS key `https_user` (default `probe-device`). `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
+The device name and the MQTT password live only in the board's NVS partition (`creds`
+namespace: `device`, `mqtt_pw`), so one image fits every board:
+`tools\provision_nvs.ps1 -Device <name>` switches the identity without a rebuild. The name
+is the MQTT login and the `<name>` in `mower/<name>/…`; without a `device` key the board
+boots as `mower-01`. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
 
 ## Layout
 
 ```
-main/        the firmware: board, cell (esp_modem PPP), mqtt_link, https_api, probe_proto, remote_cmd, gnss, ota
+main/        the firmware: board, cell (esp_modem PPP), mqtt_link, probe_proto, remote_cmd, gnss, ota
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
              mqtt_cmd.ps1 (remote commands), release.ps1 (signed OTA release)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release

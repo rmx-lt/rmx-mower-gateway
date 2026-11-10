@@ -4,13 +4,11 @@
 #   tools\mqtt_cmd.ps1 status
 #   tools\mqtt_cmd.ps1 create -Value "hello from the PC"
 #   tools\mqtt_cmd.ps1 delete -RecordId 31
-#   tools\mqtt_cmd.ps1 https_create -Value "via HTTPS"
 #   tools\mqtt_cmd.ps1 create -Gps          # value = the device's GPS location (or why there is none)
-#   tools\mqtt_cmd.ps1 https_create -Gps
-#   tools\mqtt_cmd.ps1 list | https_list | restart
-#   tools\mqtt_cmd.ps1 ota -Version 0.2.1 -Size 851234   # url = $OtaBase/<version>.bin (tools\release.ps1 prints this)
+#   tools\mqtt_cmd.ps1 list | restart
+#   tools\mqtt_cmd.ps1 ota -Version 0.2.5 -Size 851234   # file = <version>.bin (tools\release.ps1 uploads it)
 #
-# Publishes {"id","cmd","value","gps","record_id","url","version","size","expires_at"} on mower/<device>/cmd as the
+# Publishes {"id","cmd","value","gps","record_id","file","version","size","expires_at"} on mower/<device>/cmd as the
 # MQTT login "app" (the backend role: write mower/#) and waits for the answer on
 # mower/<device>/cmd/ack. Needs the Mosquitto clients for Windows and `ssh rmx-vps`.
 # The app password is read from the server into memory (or from $env:RMX_APP_MQTT_PW)
@@ -20,11 +18,11 @@ param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Cmd,
     [string]$Value,
     [long]$RecordId = -1,
-    [switch]$Gps,             # "gps": true (create / https_create)
+    [switch]$Gps,             # "gps": true (create)
     [string]$Version,         # ota: the image version (must match its header)
-    [string]$Url,             # ota: image URL (default $OtaBase/<Version>.bin)
+    [string]$File,            # ota: file name on the server (default <Version>.bin)
+    [string]$Url,             # ota: legacy; the last path segment is the file name when -File is absent
     [long]$Size = 0,          # ota: image size in bytes (0 = not checked)
-    [string]$OtaBase = 'https://api.rmx.lt/fw/probe',
     [int]$TtlS = 60,          # expires_at = now + TtlS (0 = no expiry, negative = already expired, for tests)
     [int]$TimeoutS = 45,
     [string]$Device = 'mower-01'
@@ -51,7 +49,15 @@ if ($Gps) { $msg.gps = $true }
 if ($RecordId -ge 0) { $msg.record_id = $RecordId }
 if ($Cmd -eq 'ota') {
     if (-not $Version) { throw 'ota needs -Version' }
-    $msg.url = if ($Url) { $Url } else { "$OtaBase/$Version.bin" }
+    if ($File) {
+        $msg.file = $File
+    } elseif ($Url) {
+        $leaf = ($Url -split '/')[-1] -replace '\?.*$', ''
+        $msg.file = $leaf
+        $msg.url = $Url
+    } else {
+        $msg.file = "$Version.bin"
+    }
     $msg.version = $Version
     if ($Size -gt 0) { $msg.size = $Size }
 }

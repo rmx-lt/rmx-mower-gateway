@@ -2,9 +2,9 @@
  * rmx-mower-gateway: LilyGo T-SIM7600 (ESP32 + SIM7600G-H) talking to
  * rmx-server-app over LTE.
  *
- * board -> cell (PPP) -> HTTPS (health, login, create, list) -> MQTT
- * (connect, create + list over mower/<name>/req|res) -> stay online and run
- * remote commands from mower/<name>/cmd (see remote_cmd.h).
+ * board -> cell (PPP) -> MQTT (connect, create + list over mower/<name>/req|res)
+ * -> stay online and run remote commands from mower/<name>/cmd (see remote_cmd.h).
+ * Firmware updates arrive as MQTT chunks (main/ota.c).
  */
 #include <stdio.h>
 #include <time.h>
@@ -23,7 +23,6 @@
 #include "cell.h"
 #include "creds.h"
 #include "gnss.h"
-#include "https_api.h"
 #include "mqtt_link.h"
 #include "ota.h"
 #include "probe_proto.h"
@@ -42,45 +41,6 @@ static void log_result(const char *what, const probe_result_t *r)
     } else {
         ESP_LOGI(TAG, "%s: ok, %s count %d", what, r->kind, r->count);
     }
-}
-
-static int self_test_https(void)
-{
-    int failures = 0;
-    probe_result_t r;
-    char value[64];
-
-    if (https_api_health() != ESP_OK) {
-        ESP_LOGE(TAG, "TEST https health: FAIL (probe off on the VPS -> 502)");
-        return 1;
-    }
-    ESP_LOGI(TAG, "TEST https health: PASS");
-
-    if (https_api_login() != ESP_OK) {
-        ESP_LOGE(TAG, "TEST https login: FAIL");
-        return 1;
-    }
-    ESP_LOGI(TAG, "TEST https login: PASS");
-
-    snprintf(value, sizeof(value), "https from T-SIM7600, uptime %lld s, rssi %d",
-             esp_timer_get_time() / 1000000, cell_last_rssi());
-    if (https_api_create(value, &r) == ESP_OK && r.ok && r.id >= 0) {
-        log_result("https create", &r);
-        ESP_LOGI(TAG, "TEST https create: PASS");
-    } else {
-        ESP_LOGE(TAG, "TEST https create: FAIL");
-        failures++;
-    }
-
-    if (https_api_list(&r) == ESP_OK && r.ok) {
-        ESP_LOGI(TAG, "https list: %d records, newest id %lld (%s)", r.count, r.id,
-                 r.connection_type[0] ? r.connection_type : "-");
-        ESP_LOGI(TAG, "TEST https list: PASS");
-    } else {
-        ESP_LOGE(TAG, "TEST https list: FAIL");
-        failures++;
-    }
-    return failures;
 }
 
 static int self_test_mqtt(void)
@@ -152,10 +112,8 @@ void app_main(void)
 
     gnss_start();   /* the first fix takes a while: start searching early */
 
-    int failures = self_test_https();
-    https_api_close();   /* frees the TLS session (~40 KB); MQTT keeps its own */
     ESP_ERROR_CHECK(remote_cmd_init());
-    failures += self_test_mqtt();
+    int failures = self_test_mqtt();
     ESP_LOGI(TAG, "SELF-TEST %s (%d failure%s), free heap %u, min %u, internal %u",
              failures ? "FAILED" : "PASSED", failures, failures == 1 ? "" : "s",
              (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size(),

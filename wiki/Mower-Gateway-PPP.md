@@ -7,9 +7,10 @@ Working reference code: [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/
 
 ## Why PPP
 
-The modem becomes a plain IP pipe. lwIP, DNS, TLS (mbedTLS), MQTT (esp-mqtt) and HTTP
-(esp_http_client) all run on the ESP32 with standard ESP-IDF APIs. That gives TLS 1.3/1.2,
-the Mozilla cert bundle, normal error codes, and code that also works over Wi-Fi.
+The modem becomes a plain IP pipe. lwIP, DNS, TLS (mbedTLS) and MQTT (esp-mqtt) run on the
+ESP32 with standard ESP-IDF APIs. That gives TLS 1.3/1.2, the ISRG cert bundle, normal error
+codes, and code that also works over Wi-Fi. The gateway firmware speaks MQTT only.
+`tools/ppp_smoke` still does one HTTPS GET to check the pipe.
 The modem's own TLS (02, option B) works too but is a fallback.
 
 ## Verified result (2026-10-19, 3 runs)

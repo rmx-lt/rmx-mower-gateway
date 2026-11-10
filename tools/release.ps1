@@ -42,7 +42,7 @@ try {
         }
     }
     if (-not $ok) { throw 'upload to rmx-vps failed (3 tries)' }
-    Write-Host "uploaded: https://api.rmx.lt/fw/probe/$version.bin"
+    Write-Host "uploaded: $RemoteDir/$version.bin (MQTT file name $version.bin)"
 
     $cmd = "tools\mqtt_cmd.ps1 ota -Version $version -Size $size -Device $Device"
     if ($Send) {

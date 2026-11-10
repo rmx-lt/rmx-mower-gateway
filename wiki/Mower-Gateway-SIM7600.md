@@ -58,7 +58,7 @@ found only one weak foreign GSM cell.
 |---|---|---|
 | How | `ATD*99#` → PPP; lwIP on the ESP32; esp_modem component | `AT+NETOPEN`, `AT+CCHOPEN` (TLS sockets), `AT+CMQTT*`, `AT+HTTP*` |
 | TLS | mbedTLS on the ESP32: TLS 1.2/1.3, full control, cert bundle | modem's TLS: **max TLS 1.2**, SNI **off by default**, CA file must be uploaded |
-| MQTT/HTTP libs | esp-mqtt (`espressif/mqtt`), `esp_http_client` — standard, testable | parse AT URCs yourself (TinyGSM does this in Arduino) |
+| MQTT lib | esp-mqtt (`espressif/mqtt`) — the gateway firmware has no HTTP client | parse AT URCs yourself (TinyGSM does this in Arduino) |
 | AT while online | needs CMUX (`AT+CMUX=0`, supported) or pausing PPP | always available |
 | Status | **chosen path** for the probe (see 04) | **verified working** as a fallback (below) |
 

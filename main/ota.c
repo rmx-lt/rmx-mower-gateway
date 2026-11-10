@@ -5,53 +5,84 @@
 #include <string.h>
 #include <time.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
+#include "cJSON.h"
 #include "esp_app_desc.h"
-#include "esp_crt_bundle.h"
-#include "esp_http_client.h"
-#include "esp_https_ota.h"
+#include "esp_app_format.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "psa/crypto.h"
 #include "cell.h"
 #include "mqtt_link.h"
-#include "creds.h"
 #include "probe_proto.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "ota";
 
-#define ATTEMPTS        4       /* one download, resumed up to 3 times */
+/* wiki Mower-Gateway-Server-Contract, "Firmware over MQTT": the frame is the
+ * contract in rmx-server-app (Server-App, "Firmware over MQTT"). One request
+ * is in flight. A dropped link retries the same chunk; bytes already written
+ * with esp_ota_write stay, so the next try resumes at the next index. */
+#define CHUNK_TRIES     4
+#define CHUNK_WAIT_MS   45000
 #define ID_LEN          64
-#define URL_LEN         256
-#define VERSION_LEN     32      /* esp_app_desc_t.version */
+#define FILE_LEN        128
+#define VERSION_LEN     32
+#define FW_HDR_LEN      64
+#define FW_MAX_FRAME    (FW_HDR_LEN + 16384)
+
+#define APP_DESC_BYTES  (sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t))
+
+typedef struct __attribute__((packed)) {
+    char magic[4];
+    uint8_t version;
+    uint8_t flags;
+    uint16_t header_len;
+    uint32_t chunk_index;
+    uint32_t chunk_count;
+    uint32_t image_size;
+    uint16_t chunk_len;
+    uint16_t reserved;
+    uint8_t request_id_hash[8];
+    uint8_t sha256[32];
+} rmx_fw_hdr_t;
+
+_Static_assert(sizeof(rmx_fw_hdr_t) == FW_HDR_LEN, "firmware chunk header is 64 bytes");
 
 typedef struct {
     char id[ID_LEN + 1];
-    char url[URL_LEN + 1];
+    char file[FILE_LEN + 1];
     char version[VERSION_LEN];
     int size;                   /* expected image size, 0 = don't check */
 } ota_req_t;
 
+typedef struct {
+    uint8_t *data;
+    size_t len;
+    bool chunk;                 /* false: JSON on fw/res */
+} fw_rx_t;
+
 static ota_req_t s_req;
 static volatile bool s_busy;
+static volatile bool s_listen;
+static QueueHandle_t s_rxq;
 static esp_timer_handle_t s_confirm_timer;
 static bool s_pending_verify;
-static bool s_report_pending;   /* confirmed an OTA image, server not told yet */
+static bool s_report_pending;
 
-/* Last attempt since boot, for the status command */
-static const char *volatile s_state = "idle";   /* idle, downloading, done, failed */
+static const char *volatile s_state = "idle";
 static char s_target[VERSION_LEN];
-static volatile int s_progress = -1;            /* percent, -1 = unknown */
+static volatile int s_progress = -1;
 static char s_error[32];
 
 static bool clock_valid(void)
 {
-    return time(NULL) > 1700000000;   /* set by SNTP */
+    return time(NULL) > 1700000000;
 }
 
-/* Acks on mower/<user>/cmd/ack in the same shape as remote_cmd.c. */
 static void send_ack(const char *state, const char *error, const char *message, int64_t t0)
 {
     cJSON *reply = cJSON_CreateObject();
@@ -88,13 +119,218 @@ static void fail(const char *error, const char *message, int64_t t0)
     send_ack(NULL, error, message, t0);
 }
 
-/* The header of the new image: same project, the version that was asked for,
- * not the one already running. */
-static bool check_header(esp_https_ota_handle_t h, int64_t t0)
+static void on_fw(const uint8_t *data, size_t len, bool chunk)
+{
+    if (!s_listen || !s_rxq || len == 0 || len > FW_MAX_FRAME) {
+        return;
+    }
+    uint8_t *copy = malloc(len);
+    if (!copy) {
+        ESP_LOGE(TAG, "no memory for a %u-byte firmware message", (unsigned)len);
+        return;
+    }
+    memcpy(copy, data, len);
+    fw_rx_t m = { .data = copy, .len = len, .chunk = chunk };
+    if (xQueueSend(s_rxq, &m, 0) != pdTRUE) {
+        fw_rx_t old;
+        if (xQueueReceive(s_rxq, &old, 0) == pdTRUE) {
+            free(old.data);
+        }
+        if (xQueueSend(s_rxq, &m, 0) != pdTRUE) {
+            free(copy);
+        }
+    }
+}
+
+static void drain_rx(void)
+{
+    fw_rx_t m;
+    while (s_rxq && xQueueReceive(s_rxq, &m, 0) == pdTRUE) {
+        free(m.data);
+    }
+}
+
+static void finish_task(void) __attribute__((noreturn));
+
+static void finish_task(void)
+{
+    s_listen = false;
+    mqtt_link_set_fw_handler(NULL);
+    drain_rx();
+    s_busy = false;
+    vTaskDelete(NULL);
+    abort();
+}
+
+static void restart_into_new_image(void)
+{
+    ESP_LOGW(TAG, "restarting into %s in 3 s", s_req.version);
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    mqtt_link_stop();
+    cell_stop();
+    esp_restart();
+}
+
+static bool sha256_id(const char *rid, uint8_t out[8])
+{
+    uint8_t full[32];
+    size_t n = 0;
+    if (psa_hash_compute(PSA_ALG_SHA_256, (const uint8_t *)rid, strlen(rid), full, sizeof(full), &n) != PSA_SUCCESS ||
+            n < 8) {
+        return false;
+    }
+    memcpy(out, full, 8);
+    return true;
+}
+
+/* False when the frame is not ours or not a version-1 header. Payload points
+ * into data. */
+static bool parse_frame(const uint8_t *data, size_t len, const uint8_t expect_hash[8],
+                        rmx_fw_hdr_t *hdr, const uint8_t **payload)
+{
+    if (len < FW_HDR_LEN) {
+        return false;
+    }
+    memcpy(hdr, data, FW_HDR_LEN);
+    if (memcmp(hdr->magic, "RMFW", 4) != 0 || hdr->version != 1 || hdr->flags != 0x01 ||
+            hdr->header_len != FW_HDR_LEN || hdr->reserved != 0) {
+        return false;
+    }
+    if (len != FW_HDR_LEN + (size_t)hdr->chunk_len) {
+        return false;
+    }
+    if (memcmp(hdr->request_id_hash, expect_hash, 8) != 0) {
+        return false;
+    }
+    *payload = data + FW_HDR_LEN;
+    return true;
+}
+
+static bool parse_fw_error(const uint8_t *data, size_t len, const char *rid,
+                           char *code, size_t code_len, char *msg, size_t msg_len)
+{
+    cJSON *j = cJSON_ParseWithLength((const char *)data, len);
+    if (!j) {
+        return false;
+    }
+    const char *id = cJSON_GetStringValue(cJSON_GetObjectItem(j, "request_id"));
+    cJSON *err = cJSON_GetObjectItem(j, "error");
+    bool match = id && strcmp(id, rid) == 0 && cJSON_IsObject(err);
+    if (match) {
+        const char *c = cJSON_GetStringValue(cJSON_GetObjectItem(err, "code"));
+        const char *m = cJSON_GetStringValue(cJSON_GetObjectItem(err, "message"));
+        snprintf(code, code_len, "%s", (c && c[0]) ? c : "failed");
+        snprintf(msg, msg_len, "%s", (m && m[0]) ? m : "firmware request failed");
+    }
+    cJSON_Delete(j);
+    return match;
+}
+
+typedef enum {
+    RX_CHUNK,
+    RX_TIMEOUT,
+    RX_SERVER,
+} rx_kind_t;
+
+/* Waits for the chunk with this request id, or a JSON error for it.
+ * On RX_CHUNK the caller frees *frame. */
+static rx_kind_t wait_chunk(const char *rid, const uint8_t expect_hash[8], int timeout_ms,
+                            uint8_t **frame, size_t *frame_len,
+                            char *err_code, size_t err_code_len, char *err_msg, size_t err_msg_len)
+{
+    int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+    for (;;) {
+        int64_t left_us = deadline - esp_timer_get_time();
+        if (left_us <= 0) {
+            return RX_TIMEOUT;
+        }
+        fw_rx_t m;
+        if (xQueueReceive(s_rxq, &m, pdMS_TO_TICKS((left_us + 999) / 1000)) != pdTRUE) {
+            return RX_TIMEOUT;
+        }
+        if (!m.chunk) {
+            bool server = parse_fw_error(m.data, m.len, rid, err_code, err_code_len, err_msg, err_msg_len);
+            free(m.data);
+            if (server) {
+                return RX_SERVER;
+            }
+            continue;
+        }
+        rmx_fw_hdr_t hdr;
+        const uint8_t *payload = NULL;
+        bool ours = parse_frame(m.data, m.len, expect_hash, &hdr, &payload);
+        if (!ours) {
+            free(m.data);
+            continue;
+        }
+        *frame = m.data;
+        *frame_len = m.len;
+        return RX_CHUNK;
+    }
+}
+
+static bool link_up(int attempt)
+{
+    if (mqtt_link_wait_ready(0)) {
+        return true;
+    }
+    ESP_LOGW(TAG, "MQTT down before chunk retry %d", attempt);
+    return cell_wait_ip(120000) && mqtt_link_wait_ready(90000);
+}
+
+static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len, int64_t t0)
+{
+    char rid[PROBE_REQUEST_ID_LEN + 1];
+    probe_proto_new_request_id(rid);
+    uint8_t expect[8];
+    if (!sha256_id(rid, expect)) {
+        fail("failed", "could not hash the firmware request id", t0);
+        return false;
+    }
+    char body[FILE_LEN + 96];
+    snprintf(body, sizeof(body),
+             "{\"request_id\":\"%s\",\"op\":\"chunk\",\"file\":\"%s\",\"chunk\":%lu}",
+             rid, s_req.file, (unsigned long)index);
+
+    for (int attempt = 0; attempt < CHUNK_TRIES; attempt++) {
+        if (attempt > 0) {
+            ESP_LOGW(TAG, "chunk %lu retry %d/%d", (unsigned long)index, attempt, CHUNK_TRIES - 1);
+            vTaskDelay(pdMS_TO_TICKS(2000 * attempt));
+        }
+        if (!link_up(attempt)) {
+            continue;
+        }
+        if (mqtt_link_publish_fw_req(body) != ESP_OK) {
+            continue;
+        }
+        char code[24];
+        char message[96];
+        rx_kind_t kind = wait_chunk(rid, expect, CHUNK_WAIT_MS, frame, frame_len,
+                                    code, sizeof(code), message, sizeof(message));
+        if (kind == RX_CHUNK) {
+            return true;
+        }
+        if (kind == RX_SERVER) {
+            /* Stable machine code from the server. "firmware is not configured"
+             * means FIRMWARE_DIR is unset: retrying will not help. */
+            const char *use = code;
+            if (strcmp(code, "bad_request") != 0 && strcmp(code, "not_found") != 0 &&
+                    strcmp(code, "internal") != 0) {
+                use = "failed";
+            }
+            fail(use, message, t0);
+            return false;
+        }
+    }
+    fail("download_failed", "no firmware chunk (the link dropped or firmware is not served)", t0);
+    return false;
+}
+
+static bool check_desc(const esp_partition_t *part, int64_t t0)
 {
     esp_app_desc_t desc;
     const esp_app_desc_t *running = esp_app_get_description();
-    if (esp_https_ota_get_img_desc(h, &desc) != ESP_OK) {
+    if (esp_ota_get_partition_description(part, &desc) != ESP_OK) {
         fail("bad_image", "could not read the image header", t0);
         return false;
     }
@@ -111,122 +347,205 @@ static bool check_header(esp_https_ota_handle_t h, int64_t t0)
         fail("same_version", "this version is already running", t0);
         return false;
     }
-    int size = esp_https_ota_get_image_size(h);
-    if (s_req.size > 0 && size != s_req.size) {
-        ESP_LOGE(TAG, "image size %d, expected %d", size, s_req.size);
-        fail("bad_size", "the image size differs from the command", t0);
-        return false;
-    }
     return true;
-}
-
-static void restart_into_new_image(void)
-{
-    ESP_LOGW(TAG, "restarting into %s in 3 s", s_req.version);
-    vTaskDelay(pdMS_TO_TICKS(3000));   /* let the ack go out */
-    mqtt_link_stop();
-    cell_stop();
-    esp_restart();
 }
 
 static void ota_task(void *arg)
 {
     int64_t t0 = esp_timer_get_time();
-    esp_http_client_config_t http = {
-        .url = s_req.url,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-        .timeout_ms = 30000,
-        .keep_alive_enable = true,
-        .buffer_size = 4096,
-        .buffer_size_tx = 1024,
-    };
-    char ota_pw[CREDS_MAX_LEN];
-    if (creds_get(CREDS_OTA_PW, ota_pw, sizeof(ota_pw)) == ESP_OK && ota_pw[0]) {
-        http.username = creds_https_user();
-        http.password = ota_pw;
-        http.auth_type = HTTP_AUTH_TYPE_BASIC;
+    s_listen = true;
+    mqtt_link_set_fw_handler(on_fw);
+    drain_rx();
+    if (psa_crypto_init() != PSA_SUCCESS) {
+        fail("failed", "crypto init failed", t0);
+        finish_task();
     }
 
-    int written = 0;   /* bytes already in the update slot, kept across retries */
-    int size = s_req.size;
-    for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-        if (attempt > 0) {
-            ESP_LOGW(TAG, "retry %d/%d in %d s, resuming at %d bytes", attempt, ATTEMPTS - 1,
-                     10 * attempt, written);
-            vTaskDelay(pdMS_TO_TICKS(10000 * attempt));
-            if (!cell_wait_ip(120000)) {
-                continue;
-            }
-        }
-        esp_https_ota_config_t cfg = {
-            .http_config = &http,
-            .ota_resumption = written > 0,     /* Range: bytes=<written>- */
-            .ota_image_bytes_written = written,
-        };
-        esp_https_ota_handle_t h = NULL;
-        if (esp_https_ota_begin(&cfg, &h) != ESP_OK) {
-            ESP_LOGE(TAG, "could not start the download from %s", s_req.url);
-            continue;
-        }
-        if (written == 0 && !check_header(h, t0)) {
-            esp_https_ota_abort(h);
-            s_busy = false;
-            vTaskDelete(NULL);
-        }
-        if (size <= 0) {
-            size = esp_https_ota_get_image_size(h);   /* the full image on the first request */
-        }
-        int last_logged = -1;
-        esp_err_t err;
-        while ((err = esp_https_ota_perform(h)) == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
-            written = esp_https_ota_get_image_len_read(h);
-            if (size > 0) {
-                s_progress = (int)((int64_t)written * 100 / size);
-                if (s_progress / 10 != last_logged) {
-                    last_logged = s_progress / 10;
-                    ESP_LOGI(TAG, "%d %% (%d of %d bytes)", s_progress, written, size);
-                }
-            }
-        }
-        written = esp_https_ota_get_image_len_read(h);
-        if (err != ESP_OK || !esp_https_ota_is_complete_data_received(h)) {
-            ESP_LOGE(TAG, "download stopped at %d bytes: %s", written, esp_err_to_name(err));
-            esp_https_ota_abort(h);
-            continue;
-        }
-        /* Checks the image hash and (with signed apps) the signature, then
-         * makes the update slot the boot slot. */
-        err = esp_https_ota_finish(h);
-        if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
-            fail("bad_image", "image check failed (signature or hash, see the device log)", t0);
-        } else if (err != ESP_OK) {
-            fail("failed", esp_err_to_name(err), t0);
-        } else {
-            ESP_LOGI(TAG, "update to %s written in %lld s", s_req.version,
-                     (esp_timer_get_time() - t0) / 1000000);
-            s_progress = 100;
-            s_state = "done";
-            send_ack("done", NULL, NULL, t0);
-            restart_into_new_image();
-        }
-        s_busy = false;
-        vTaskDelete(NULL);
+    const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
+    if (!part) {
+        fail("failed", "no OTA partition", t0);
+        finish_task();
     }
-    fail("download_failed", "download failed, the running firmware is unchanged", t0);
-    s_busy = false;
-    vTaskDelete(NULL);
+
+    esp_ota_handle_t handle = 0;
+    psa_hash_operation_t sha = PSA_HASH_OPERATION_INIT;
+    bool sha_open = false;
+    uint32_t image_size = 0;
+    uint32_t chunk_count = 0;
+    uint8_t expect_sha[32];
+    bool have_meta = false;
+    bool desc_checked = false;
+    size_t written = 0;
+    int last_logged = -1;
+
+    for (uint32_t index = 0; !have_meta || index < chunk_count; index++) {
+        uint8_t *frame = NULL;
+        size_t frame_len = 0;
+        if (!fetch_chunk(index, &frame, &frame_len, t0)) {
+            if (handle) {
+                esp_ota_abort(handle);
+            }
+            if (sha_open) {
+                psa_hash_abort(&sha);
+            }
+            finish_task();
+        }
+        rmx_fw_hdr_t hdr;
+        memcpy(&hdr, frame, FW_HDR_LEN);
+        const uint8_t *payload = frame + FW_HDR_LEN;
+
+        if (hdr.chunk_index != index) {
+            free(frame);
+            fail("bad_image", "firmware chunk index does not match the request", t0);
+            if (handle) {
+                esp_ota_abort(handle);
+            }
+            if (sha_open) {
+                psa_hash_abort(&sha);
+            }
+            finish_task();
+        }
+        if (!have_meta) {
+            image_size = hdr.image_size;
+            chunk_count = hdr.chunk_count;
+            memcpy(expect_sha, hdr.sha256, sizeof(expect_sha));
+            if (image_size == 0 || image_size > part->size || chunk_count == 0 ||
+                    chunk_count > (part->size / 256) + 1) {
+                free(frame);
+                fail("bad_size", "firmware image size is not usable", t0);
+                finish_task();
+            }
+            if (s_req.size > 0 && (uint32_t)s_req.size != image_size) {
+                free(frame);
+                ESP_LOGE(TAG, "image size %lu, expected %d", (unsigned long)image_size, s_req.size);
+                fail("bad_size", "the image size differs from the command", t0);
+                finish_task();
+            }
+            if (psa_hash_setup(&sha, PSA_ALG_SHA_256) != PSA_SUCCESS) {
+                free(frame);
+                fail("failed", "could not start the image hash", t0);
+                finish_task();
+            }
+            sha_open = true;
+            if (esp_ota_begin(part, image_size, &handle) != ESP_OK) {
+                free(frame);
+                psa_hash_abort(&sha);
+                fail("failed", "could not start writing the update slot", t0);
+                finish_task();
+            }
+            have_meta = true;
+        } else if (hdr.image_size != image_size || hdr.chunk_count != chunk_count ||
+                   memcmp(hdr.sha256, expect_sha, sizeof(expect_sha)) != 0) {
+            free(frame);
+            esp_ota_abort(handle);
+            psa_hash_abort(&sha);
+            fail("bad_image", "firmware chunk header changed mid-download", t0);
+            finish_task();
+        }
+
+        if (hdr.chunk_len > 0) {
+            if (esp_ota_write(handle, payload, hdr.chunk_len) != ESP_OK ||
+                    psa_hash_update(&sha, payload, hdr.chunk_len) != PSA_SUCCESS) {
+                free(frame);
+                esp_ota_abort(handle);
+                psa_hash_abort(&sha);
+                fail("failed", "writing the update slot failed", t0);
+                finish_task();
+            }
+        }
+        written += hdr.chunk_len;
+        free(frame);
+
+        if (!desc_checked && written >= APP_DESC_BYTES) {
+            if (!check_desc(part, t0)) {
+                esp_ota_abort(handle);
+                psa_hash_abort(&sha);
+                finish_task();
+            }
+            desc_checked = true;
+        }
+        s_progress = (int)((uint64_t)written * 100 / image_size);
+        if (s_progress / 10 != last_logged) {
+            last_logged = s_progress / 10;
+            ESP_LOGI(TAG, "%d %% (%u of %lu bytes, chunk %lu/%lu)", s_progress,
+                     (unsigned)written, (unsigned long)image_size,
+                     (unsigned long)index + 1, (unsigned long)chunk_count);
+        }
+    }
+
+    if (!desc_checked) {
+        esp_ota_abort(handle);
+        psa_hash_abort(&sha);
+        fail("bad_image", "image is too small to hold an app header", t0);
+        finish_task();
+    }
+    if (written != image_size) {
+        esp_ota_abort(handle);
+        psa_hash_abort(&sha);
+        fail("bad_size", "the chunks do not add up to the image size", t0);
+        finish_task();
+    }
+
+    uint8_t got[32];
+    size_t got_len = 0;
+    psa_status_t st = psa_hash_finish(&sha, got, sizeof(got), &got_len);
+    sha_open = false;
+    if (st != PSA_SUCCESS || got_len != sizeof(expect_sha) || memcmp(got, expect_sha, sizeof(got)) != 0) {
+        esp_ota_abort(handle);
+        fail("bad_image", "image SHA-256 does not match the firmware header", t0);
+        finish_task();
+    }
+    ESP_LOGI(TAG, "image SHA-256 matches the chunk header");
+
+    /* esp_ota_end checks the image, including the RSA-3072 signature when
+     * CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT is set. The handle is
+     * released here, success or not. Boot slot changes only after that. */
+    esp_err_t err = esp_ota_end(handle);
+    handle = 0;
+    if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
+        fail("bad_image", "image check failed (signature or hash, see the device log)", t0);
+        finish_task();
+    }
+    if (err != ESP_OK) {
+        fail("failed", esp_err_to_name(err), t0);
+        finish_task();
+    }
+    err = esp_ota_set_boot_partition(part);
+    if (err != ESP_OK) {
+        fail("failed", esp_err_to_name(err), t0);
+        finish_task();
+    }
+
+    ESP_LOGI(TAG, "update to %s written in %lld s", s_req.version, (esp_timer_get_time() - t0) / 1000000);
+    s_progress = 100;
+    s_state = "done";
+    send_ack("done", NULL, NULL, t0);
+    restart_into_new_image();
+    finish_task();
 }
 
-bool ota_start(const char *cmd_id, const char *url, const char *version, int size,
+static bool valid_fw_file(const char *name)
+{
+    size_t n = strlen(name);
+    if (n < 5 || n > FILE_LEN || strcmp(name + n - 4, ".bin") != 0) {
+        return false;
+    }
+    for (size_t i = 0; i < n - 4; i++) {
+        char c = name[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+              c == '.' || c == '_' || c == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ota_start(const char *cmd_id, const char *file, const char *version, int size,
                const char **error, const char **message)
 {
     *error = "bad_request";
-    if (!url || strlen(url) > URL_LEN) {
-        *message = "ota needs a string url (up to 256 chars)";
-        return false;
-    }
-    if (strncmp(url, CONFIG_PROBE_OTA_URL_PREFIX, strlen(CONFIG_PROBE_OTA_URL_PREFIX)) != 0) {
-        *message = "url must start with " CONFIG_PROBE_OTA_URL_PREFIX;
+    if (!file || !valid_fw_file(file)) {
+        *message = "ota needs a file name [A-Za-z0-9._-]+.bin (or a version, used as <version>.bin)";
         return false;
     }
     if (!version || !version[0] || strlen(version) >= VERSION_LEN) {
@@ -258,24 +577,32 @@ bool ota_start(const char *cmd_id, const char *url, const char *version, int siz
         *message = "signal too weak for an update (CSQ below CONFIG_PROBE_OTA_MIN_CSQ)";
         return false;
     }
+    if (!s_rxq) {
+        s_rxq = xQueueCreate(4, sizeof(fw_rx_t));
+        if (!s_rxq) {
+            *error = "failed";
+            *message = "no memory for the update";
+            return false;
+        }
+    }
 
     s_busy = true;
     snprintf(s_req.id, sizeof(s_req.id), "%s", cmd_id);
-    snprintf(s_req.url, sizeof(s_req.url), "%s", url);
+    snprintf(s_req.file, sizeof(s_req.file), "%s", file);
     snprintf(s_req.version, sizeof(s_req.version), "%s", version);
     s_req.size = size;
     snprintf(s_target, sizeof(s_target), "%s", version);
     s_error[0] = '\0';
     s_progress = 0;
     s_state = "downloading";
-    if (xTaskCreate(ota_task, "ota", 8192, NULL, 3, NULL) != pdPASS) {
+    if (xTaskCreate(ota_task, "ota", 12288, NULL, 3, NULL) != pdPASS) {
         s_busy = false;
         s_state = "failed";
         *error = "failed";
         *message = "no memory for the update task";
         return false;
     }
-    ESP_LOGI(TAG, "update %s -> %s from %s", esp_app_get_description()->version, version, url);
+    ESP_LOGI(TAG, "update %s -> %s file %s", esp_app_get_description()->version, version, file);
     return true;
 }
 
@@ -296,7 +623,7 @@ void ota_boot_init(void)
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_ota_img_states_t state;
     if (esp_ota_get_state_partition(running, &state) != ESP_OK) {
-        state = ESP_OTA_IMG_UNDEFINED;   /* flashed over USB */
+        state = ESP_OTA_IMG_UNDEFINED;
     }
     ESP_LOGI(TAG, "running from %s at 0x%lx, state %d", running->label,
              (unsigned long)running->address, (int)state);
@@ -362,7 +689,6 @@ void ota_report_update(void)
     }
     const char *version = esp_app_get_description()->version;
     const char *partition = esp_ota_get_running_partition()->label;
-    /* The image we came from is still in the other slot */
     char previous[VERSION_LEN] = "unknown";
     esp_app_desc_t desc;
     const esp_partition_t *other = esp_ota_get_next_update_partition(NULL);
@@ -381,7 +707,7 @@ void ota_report_update(void)
     cJSON_Delete(msg);
     if (!json || mqtt_link_publish_own("firmware", json, true) != ESP_OK) {
         free(json);
-        return;   /* try again on the next call */
+        return;
     }
     free(json);
     s_report_pending = false;

@@ -2,6 +2,8 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include "esp_err.h"
 #include "probe_proto.h"
 
@@ -13,9 +15,21 @@ typedef void (*mqtt_link_cmd_cb_t)(const char *data, size_t len);
 void mqtt_link_set_cmd_handler(mqtt_link_cmd_cb_t cb);
 
 /* Starts the client (auto-reconnect) and subscribes mower/<user>/res,
- * mower/events/records, mower/status/server and (with a cmd handler)
- * mower/<user>/cmd on every connect. */
+ * mower/<user>/fw/chunk, mower/<user>/fw/res, mower/events/records,
+ * mower/status/server and (with a cmd handler) mower/<user>/cmd on every
+ * connect. The receive buffer is 8192 bytes so a default 4096-byte firmware
+ * chunk (plus its 64-byte header) arrives in one MQTT_EVENT_DATA. */
 esp_err_t mqtt_link_start(void);
+
+/* Firmware messages, after reassembly. chunk is true for fw/chunk (binary)
+ * and false for fw/res (JSON). Called on the MQTT task: must not block.
+ * NULL stops delivery. */
+typedef void (*mqtt_link_fw_cb_t)(const uint8_t *data, size_t len, bool chunk);
+
+void mqtt_link_set_fw_handler(mqtt_link_fw_cb_t cb);
+
+/* Publishes a firmware request on mower/<user>/fw/req (QoS 1, not retained). */
+esp_err_t mqtt_link_publish_fw_req(const char *json);
 
 /* Waits until connected and mower/<user>/res is subscribed. */
 bool mqtt_link_wait_ready(int timeout_ms);

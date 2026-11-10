@@ -15,9 +15,11 @@
 
 static const char *TAG = "mqtt";
 
-#define CONNECTED  BIT0
-#define RES_SUBBED BIT1
-#define GOT_RES    BIT2
+#define CONNECTED    BIT0
+#define RES_SUBBED   BIT1
+#define GOT_RES      BIT2
+#define FW_CHUNK_SUB BIT3
+#define FW_RES_SUB   BIT4
 
 /* list responses can hold up to 500 records: reassemble up to this size */
 #define MAX_MESSAGE (128 * 1024)
@@ -31,8 +33,14 @@ static char s_res_topic[96];
 static char s_cmd_topic[96];
 static char s_ack_topic[96];
 static char s_status_topic[96];   /* retained online / offline, also the last will */
+static char s_fw_req_topic[96];
+static char s_fw_chunk_topic[96];
+static char s_fw_res_topic[96];
 static mqtt_link_cmd_cb_t s_cmd_cb;
+static mqtt_link_fw_cb_t s_fw_cb;
 static int s_res_sub_msg_id = -1;
+static int s_fw_chunk_sub_id = -1;
+static int s_fw_res_sub_id = -1;
 static int64_t s_connect_started_us;
 
 /* the request we wait for, and its parsed answer */
@@ -46,6 +54,20 @@ static char s_rx_topic[96];
 
 static void handle_message(const char *topic, const char *data, size_t len)
 {
+    if (strcmp(topic, s_fw_chunk_topic) == 0) {
+        if (s_fw_cb) {
+            s_fw_cb((const uint8_t *)data, len, true);
+        }
+        return;
+    }
+    if (strcmp(topic, s_fw_res_topic) == 0) {
+        if (s_fw_cb) {
+            s_fw_cb((const uint8_t *)data, len, false);
+        } else {
+            ESP_LOGI(TAG, "fw res: %.*s", len > 200 ? 200 : (int)len, data);
+        }
+        return;
+    }
     if (s_cmd_cb && strcmp(topic, s_cmd_topic) == 0) {
         s_cmd_cb(data, len);
     } else if (strcmp(topic, s_res_topic) == 0) {
@@ -117,16 +139,22 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         if (s_cmd_cb) {
             esp_mqtt_client_subscribe_single(s_client, s_cmd_topic, 1);
         }
+        s_fw_chunk_sub_id = esp_mqtt_client_subscribe_single(s_client, s_fw_chunk_topic, 1);
+        s_fw_res_sub_id = esp_mqtt_client_subscribe_single(s_client, s_fw_res_topic, 1);
         esp_mqtt_client_publish(s_client, s_status_topic, "online", 0, 1, 1);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "disconnected");
-        xEventGroupClearBits(s_ev, CONNECTED | RES_SUBBED);
+        xEventGroupClearBits(s_ev, CONNECTED | RES_SUBBED | FW_CHUNK_SUB | FW_RES_SUB);
         break;
     case MQTT_EVENT_SUBSCRIBED:
         if (e->msg_id == s_res_sub_msg_id) {
             ESP_LOGI(TAG, "subscribed %s", s_res_topic);
             xEventGroupSetBits(s_ev, RES_SUBBED);
+        } else if (e->msg_id == s_fw_chunk_sub_id) {
+            xEventGroupSetBits(s_ev, FW_CHUNK_SUB);
+        } else if (e->msg_id == s_fw_res_sub_id) {
+            xEventGroupSetBits(s_ev, FW_RES_SUB);
         }
         break;
     case MQTT_EVENT_DATA:
@@ -152,6 +180,11 @@ void mqtt_link_set_cmd_handler(mqtt_link_cmd_cb_t cb)
     s_cmd_cb = cb;
 }
 
+void mqtt_link_set_fw_handler(mqtt_link_fw_cb_t cb)
+{
+    s_fw_cb = cb;
+}
+
 esp_err_t mqtt_link_start(void)
 {
     esp_err_t err = creds_get(CREDS_MQTT_PW, s_password, sizeof(s_password));
@@ -166,6 +199,9 @@ esp_err_t mqtt_link_start(void)
     snprintf(s_cmd_topic, sizeof(s_cmd_topic), "mower/%s/cmd", name);
     snprintf(s_ack_topic, sizeof(s_ack_topic), "mower/%s/cmd/ack", name);
     snprintf(s_status_topic, sizeof(s_status_topic), "mower/%s/status", name);
+    snprintf(s_fw_req_topic, sizeof(s_fw_req_topic), "mower/%s/fw/req", name);
+    snprintf(s_fw_chunk_topic, sizeof(s_fw_chunk_topic), "mower/%s/fw/chunk", name);
+    snprintf(s_fw_res_topic, sizeof(s_fw_res_topic), "mower/%s/fw/res", name);
 
     esp_mqtt_client_config_t cfg = {
         .broker.address.uri = CONFIG_PROBE_MQTT_URI,
@@ -183,7 +219,11 @@ esp_err_t mqtt_link_start(void)
         },
         .network.reconnect_timeout_ms = 10000,
         .network.timeout_ms = 20000,
-        .buffer.size = 4096,
+        /* 8192 holds a 4096-byte firmware chunk, its 64-byte header and the
+         * MQTT framing (wiki Server-App, "Firmware over MQTT"). Larger frames
+         * are still reassembled in on_data. out_size stays small: publishes
+         * from the device are short JSON. */
+        .buffer.size = 8192,
         .buffer.out_size = 2048,
         .task.stack_size = 8192,
     };
@@ -200,7 +240,7 @@ bool mqtt_link_wait_ready(int timeout_ms)
     if (!s_ev) {
         return false;   /* never started */
     }
-    EventBits_t want = CONNECTED | RES_SUBBED;
+    EventBits_t want = CONNECTED | RES_SUBBED | FW_CHUNK_SUB | FW_RES_SUB;
     return (xEventGroupWaitBits(s_ev, want, pdFALSE, pdTRUE, pdMS_TO_TICKS(timeout_ms)) & want) == want;
 }
 
@@ -238,6 +278,19 @@ esp_err_t mqtt_link_request(probe_op_t op, int64_t id, const char *value,
     free(json);
     xSemaphoreGive(s_req_lock);
     return err;
+}
+
+esp_err_t mqtt_link_publish_fw_req(const char *json)
+{
+    if (!s_client) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (esp_mqtt_client_publish(s_client, s_fw_req_topic, json, 0, 1, 0) < 0) {
+        ESP_LOGE(TAG, "publish on %s failed", s_fw_req_topic);
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "-> %s %s", s_fw_req_topic, json);
+    return ESP_OK;
 }
 
 esp_err_t mqtt_link_publish_own(const char *subtopic, const char *payload, bool retain)

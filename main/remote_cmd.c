@@ -14,7 +14,6 @@
 #include "cell.h"
 #include "creds.h"
 #include "gnss.h"
-#include "https_api.h"
 #include "mqtt_link.h"
 #include "ota.h"
 #include "probe_proto.h"
@@ -122,23 +121,6 @@ static void run_probe_request(cJSON *reply, probe_op_t op, int64_t id, const cha
     }
 }
 
-/* HTTPS call; logs in again once if it fails (expired session, closed socket). */
-static void run_https(cJSON *reply, bool create, const char *value)
-{
-    probe_result_t r;
-    for (int attempt = 0; attempt < 2; attempt++) {
-        if (attempt == 1 && https_api_login() != ESP_OK) {
-            break;
-        }
-        esp_err_t err = create ? https_api_create(value, &r) : https_api_list(&r);
-        if (err == ESP_OK && r.ok) {
-            add_record_result(reply, &r);
-            return;
-        }
-    }
-    set_error(reply, "failed", "HTTPS request failed (see the device log)");
-}
-
 /* "gps": true replaces the value with the location (or why there is none)
  * and echoes the GPS status in the ack. */
 static void add_gps_status(cJSON *reply, bool fix, const char *status)
@@ -204,14 +186,10 @@ static void handle(const char *json, size_t len)
         set_error(reply, "bad_request", "use either value or gps, not both");
     } else if (gps && ota_busy()) {
         set_error(reply, "busy", "no GPS reads during an update (they pause PPP)");
-    } else if (gps && (strcmp(name, "create") == 0 || strcmp(name, "https_create") == 0)) {
+    } else if (gps && strcmp(name, "create") == 0) {
         char loc[GPS_VALUE_LEN], status[GPS_VALUE_LEN];
         bool fix = gnss_read(loc, sizeof(loc), status, sizeof(status));
-        if (name[0] == 'c') {
-            run_probe_request(reply, PROBE_OP_CREATE, 0, loc);
-        } else {
-            run_https(reply, true, loc);
-        }
+        run_probe_request(reply, PROBE_OP_CREATE, 0, loc);
         add_gps_status(reply, fix, status);
     } else if (strcmp(name, "ping") == 0) {
         cJSON_AddBoolToObject(reply, "ok", true);
@@ -228,16 +206,27 @@ static void handle(const char *json, size_t len)
         } else {
             run_probe_request(reply, PROBE_OP_DELETE, (int64_t)cJSON_GetNumberValue(record_id), NULL);
         }
-    } else if (strcmp(name, "https_create") == 0) {
-        run_https(reply, true, value);
-    } else if (strcmp(name, "https_list") == 0) {
-        run_https(reply, false, NULL);
     } else if (strcmp(name, "ota") == 0) {
         const char *error, *message;
+        const char *version = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "version"));
+        const char *file = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "file"));
+        const char *url = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "url"));
+        char file_buf[129];
+        if ((!file || !file[0]) && url && url[0]) {
+            const char *slash = strrchr(url, '/');
+            snprintf(file_buf, sizeof(file_buf), "%s", slash ? slash + 1 : url);
+            char *q = strchr(file_buf, '?');
+            if (q) {
+                *q = '\0';
+            }
+            file = file_buf;
+        } else if ((!file || !file[0]) && version && version[0]) {
+            snprintf(file_buf, sizeof(file_buf), "%s.bin", version);
+            file = file_buf;
+        }
         if (size_item && !cJSON_IsNumber(size_item)) {
             set_error(reply, "bad_request", "size must be the image size in bytes");
-        } else if (ota_start(id, cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "url")),
-                             cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "version")),
+        } else if (ota_start(id, file, version,
                              size_item ? (int)cJSON_GetNumberValue(size_item) : 0, &error, &message)) {
             cJSON_AddBoolToObject(reply, "ok", true);
             cJSON *res = cJSON_AddObjectToObject(reply, "result");
@@ -251,7 +240,7 @@ static void handle(const char *json, size_t len)
         restart = true;
     } else {
         set_error(reply, "unknown_cmd",
-                  "known: ping status create list delete https_create https_list ota restart");
+                  "known: ping status create list delete ota restart");
     }
 
     send_reply(reply, t0);

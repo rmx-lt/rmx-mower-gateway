@@ -1,4 +1,5 @@
-/* Firmware updates over HTTPS (esp_https_ota) and the first-boot check of a new image. */
+/* Firmware updates over MQTT (chunked, wiki Mower-Gateway-Server-Contract) and the
+ * first-boot check of a new image. */
 #pragma once
 
 #include <stdbool.h>
@@ -23,11 +24,12 @@ void ota_report_update(void);
 /* True while a download runs. */
 bool ota_busy(void);
 
-/* Checks the request and starts the download on its own task. On success the
- * task acks "done" on mower/<user>/cmd/ack with this id and restarts into the
- * new image; on failure it acks the error. Returns false with an error code
- * and message for the immediate ack when the request is refused. */
-bool ota_start(const char *cmd_id, const char *url, const char *version, int size,
+/* Checks the request and starts the download on its own task. file is the
+ * image name on the server (<version>.bin). On success the task acks "done"
+ * on mower/<user>/cmd/ack with this id and restarts into the new image; on
+ * failure it acks the error. Returns false with an error code and message
+ * for the immediate ack when the request is refused. */
+bool ota_start(const char *cmd_id, const char *file, const char *version, int size,
                const char **error, const char **message);
 
 /* Adds "version", "partition" and "ota" (last update attempt) to a status result. */

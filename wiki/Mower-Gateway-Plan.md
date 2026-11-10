@@ -3,8 +3,9 @@
 ## Goal
 
 `rmx-mower-gateway`: ESP-IDF firmware on the T-SIM7600 that connects over LTE to
-rmx-server and talks to **rmx-server-app** over **MQTT over TLS** (`mqtt.rmx.lt:8883`) and
-**HTTPS** (`api.rmx.lt/probe/…`). It is the device-side rehearsal of the future rmx-mower link.
+rmx-server and talks to **rmx-server-app** over **MQTT over TLS** (`mqtt.rmx.lt:8883`), including
+firmware download. It is the device-side rehearsal of the future rmx-mower link. The firmware
+has no HTTPS client.
 
 ## What is already proven on the hardware (2026-10-19)
 
@@ -23,13 +24,14 @@ rmx-server and talks to **rmx-server-app** over **MQTT over TLS** (`mqtt.rmx.lt:
       `probe/res/probe-device`, retained `probe/status/server` = `online` received
 - [x] MQTT `create` on `probe/req/probe-device` → answer on `probe/res/probe-device` in ~240 ms
       (`connection_type: mqtt`), plus the `probe/events/records` event; `list` in ~370 ms
-- [x] HTTPS: health 200 (3.7 s incl. TLS), login 200 + `__Secure-probe_session` cookie (~310 ms),
-      `POST /api/records` with `Origin: https://api.rmx.lt` + cookie → 201 (`connection_type: https`),
-      `GET /api/records` 200 (~310 ms). The keep-alive connection reuses one TLS session.
+- [x] MQTT create/list on `mower/<name>/req|res`. The gateway firmware has no HTTPS client
+      (removed with firmware-over-MQTT). `tools/ppp_smoke` still checks `GET /probe/health`.
 - [x] ESP reset while the modem was in PPP → next boot connects normally (PPP in ~150 ms)
 - [x] 3 min online afterwards: PPP and MQTT stayed up (keepalive 60 s), heap stable
       (4.39 MB free, 284 KB internal)
-- App image 833 KB in a 4 MB OTA slot.
+- App image on that date: 833 KB in a 4 MB OTA slot. The 2026-11-10 PlatformIO `probe`
+  image is smaller: `text` 576417, `data` 146044, `bss` 9289; the signed `firmware.bin`
+  is 729088 bytes.
 
 ### Remote commands over MQTT — verified 2026-10-19
 
@@ -46,55 +48,63 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
 ```
 
 - Commands: `ping`, `status` (uptime, PPP, rssi, heap, clock), `create`/`list`/`delete` (forwarded
-  to the probe server over MQTT), `https_create`/`https_list` (over HTTPS; logs in again once on
-  failure), `restart` (acks, then leaves PPP and restarts).
+  to the probe server over MQTT), `ota`, `restart` (acks, then leaves PPP and restarts).
 - Errors: `bad_request`, `unknown_cmd`, `expired`, `no_clock`, `timeout`, `failed`, or the probe
   server's own code. Duplicate ids (QoS 1 redelivery; last 8 kept) are ignored without a reply.
 - `expires_at` (unix s, optional): refused when past, or when the clock isn't set. The clock comes
   from SNTP (`pool.ntp.org`) over PPP right after boot (worked first try, < 4 s).
 - Measured PC → device → PC round trip (incl. a fresh TLS connect of `mosquitto_rr`): ~0.5–1 s;
-  `create` ~0.5 s on the device, `https_create` ~3.7 s (new TLS handshake, the HTTPS client is
-  closed after the self-test). After `restart` the device was back and answering in ~30 s.
+  `create` ~0.5 s on the device. After `restart` the device was back and answering in ~30 s.
 - Commands run on their own task (queue of 4): the MQTT task must never block, because a
   forwarded request waits for its response on that same task.
-- `"gps": true` on `create` / `https_create` (`tools/mqtt_cmd.ps1 -Gps`, verified 2026-10-20): the value
+- `"gps": true` on `create` (`tools/mqtt_cmd.ps1 -Gps`, verified 2026-10-20): the value
   sent is the GNSS location as a JSON string, e.g.
   `{"gps":"fix","lat":…,"lon":…,"alt":…,"utc":"2026-10-20T09:19:18Z","sats":9,"hdop":0.8,"mode":"3D"}`,
   or `gps unavailable: <why>` (no fix (searching N s), GNSS was off / turned on now, AT+CGPS? / AT+CGNSSINFO
   error|timeout, PPP down, modem busy, +++ failed). The ack `result` gets `"gps"` (the status) and
   `"gps_fix"`. `gps` together with `value` → `bad_request`. Code: `main/gnss.c`; AT access by pausing PPP
   for ~2 s (04). GNSS is turned on at boot (`gnss_start()`).
-  Verified: no-fix path over MQTT (record 50, 52) and HTTPS (record 51), records on the server hold
+  Verified: no-fix path over MQTT (record 50, 52), records on the server hold
   `gps unavailable: no fix (searching 20 s)`; MQTT/PPP stayed up; `create` with gps ~2.2–2.3 s on the
-  device, `https_create` ~5.6 s (new TLS). Fix path verified the same day with the board at a
-  window: `create` → record 60, `https_create` → record 61, both with the JSON location (12 sats,
-  HDOP 1.0), ack `"gps_fix":true,"gps":"fix (2D, 12 sats, <utc>)"`, ~2.2 s / ~5.8 s on the device.
+  device. Fix path verified the same day with the board at a
+  window: `create` → record 60 with the JSON location (12 sats,
+  HDOP 1.0), ack `"gps_fix":true,"gps":"fix (2D, 12 sats, <utc>)"`, ~2.2 s on the device.
   Indoors (antenna connected): no fix after 18 min (record 54).
 - `mosquitto_rr` 2.0.20 has no `-f`; it silently sent an empty payload. Use `-m` (quote-escaped).
 - Using `app` from the PC: on 8883 its client id is forced to `app`, so a real backend on that
   login would be kicked while the script runs (no backend runs yet).
 
-### Firmware updates (OTA) — verified on the board 2026-10-22 (good update path)
+### Firmware updates (OTA)
 
-- `main/ota.c` + the `ota` command ([Mower-Gateway → Firmware updates](Mower-Gateway#firmware-updates-ota)): esp_https_ota from
-  `https://api.rmx.lt/fw/probe/<version>.bin` (Caddy, basic auth), resumed with HTTP Range
-  after a drop (3 retries), header check (project, version, not the running one), size check.
+`main/ota.c` downloads `<version>.bin` as MQTT chunks (the same file names as `/fw/probe/`),
+one request in flight. A timeout retries that chunk (3 retries, same request id) and the next
+index resumes while the task is still running. A board reset drops that progress; the next
+`ota` command starts clean. Checks, in order: app header (project, the requested version, not
+the running one), size, whole-image SHA-256 against the chunk header, then `esp_ota_end`
+(the RSA-3072 signature, `CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`) and only then
+`esp_ota_set_boot_partition`. See [Mower-Gateway → Firmware updates](Mower-Gateway#firmware-updates-ota).
+
 - Rollback: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`. A new image confirms itself on the first
   MQTT CONNACK; without it within `CONFIG_PROBE_OTA_CONFIRM_S` (300 s) it rolls back.
 - Signed apps without Secure Boot (decided by the user 2026-10-22: no Secure Boot, no eFuses):
   RSA-3072, key in gitignored `keys/ota_signing_key.pem`. Needs `CONFIG_ESP32_REV_MIN_3`
-  (the board is v3.1). Verified in a build only: `espsecure verify-signature` passes with the key
-  and fails with another one.
-- Build 2026-10-22 (IDF v6.1): app 0xd1000 bytes (signed, 856 KB), **bootloader 0x6d20 bytes,
-  only 0x2e0 (736 B) free** below the partition table at 0x8000. Any more bootloader features
-  would need a lower bootloader log level or moving the partition table (= new layout, USB).
-- Verified 2026-10-22: USB flash of 0.2.0 (chip ESP32-D0WD-V3 rev v3.1) → `ota_0`, self-test
-  passed. `tools\release.ps1 -Send` 0.2.0 → 0.2.1 (856,064 bytes): download ~2 min over LTE
-  (~7 KB/s), reboot ~122 s after the command, answering ~50 s after the reboot, `status` →
-  version 0.2.1, partition `ota_1`, confirmed true; ~3 min from command to confirmed. A second
-  `ota -Version 0.2.1` → `same_version`. VPS: `/fw/` without login → 401.
-- Failure paths (bad image, crash on boot, link lost mid-download, wrong key, power cut) are not
-  verified on the board yet: [rmx-mower-gateway#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15).
+  (the board is v3.1). On 2026-11-10 `espsecure verify_signature --version 2` accepted the
+  signed 729088-byte image and rejected a copy with one byte flipped (digest mismatch).
+  That is the same check `esp_ota_end` runs. A tampered image on the device is not measured yet.
+- Bootloader from the 2026-10-22 build: **0x6d20 bytes, only 0x2e0 (736 B) free** below the
+  partition table at 0x8000. Any more bootloader features would need a lower bootloader log
+  level or moving the partition table (= new layout, USB).
+- HTTPS OTA, verified 2026-10-22, before this path: USB flash of 0.2.0 → `ota_0`, then
+  0.2.0 → 0.2.1 (856064 bytes) over HTTPS, confirmed on `ota_1`. A second `ota` of 0.2.1
+  returned `same_version`.
+- 2026-11-10: USB flash of the MQTT-only 0.2.4 image on `ota_0` (state valid). MQTT self-test
+  passed (create/list), and `tools\mqtt_cmd.ps1 ping` was answered. An `info` request on
+  `mower/mower-01/fw/req` was published and got no answer; the server compose has no
+  `FIRMWARE_DIR`, so it does not subscribe. The MQTT update, a mid-download retry, and
+  first-boot confirm are not measured on the board:
+  [rmx-mower-gateway#44](https://github.com/rmx-lt/rmx-mower-gateway/issues/44).
+- Other failure paths (crash on boot, wrong key, power cut) are not verified on the board:
+  [rmx-mower-gateway#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15).
 
 Open work is tracked as issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1):
 reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway/issues/16)),
@@ -107,16 +117,15 @@ OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15))
 main/
   board.c/.h        pins, modem power on/off, STATUS
   cell.c/.h         esp_modem DTE/DCE, registration wait, PPP up/down, reconnect loop, events
-  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8883, LWT, subscribe, request/response
-  https_api.c/.h    esp_http_client: login (cookie + Origin), records CRUD
+  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8883, LWT, subscribe, request/response, fw/req
   gnss.c/.h         SIM7600 GNSS over AT (via cell_with_command_mode): on at boot, read on demand
   remote_cmd.c/.h   commands from mower/<user>/cmd, acks on …/cmd/ack
-  ota.c/.h          esp_https_ota download, image checks, first-boot confirm / rollback
+  ota.c/.h          MQTT chunk download, image checks, first-boot confirm / rollback
   probe_proto.c/.h  JSON envelopes (espressif/cjson), request_id generation
-  app_main.c        sequence: board → cell → https test → mqtt test → loop
+  app_main.c        sequence: board → cell → mqtt test → loop
 idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
-Kconfig.projbuild   APN, server URLs, default device name (no passwords)
-creds.c/.h          device name + passwords from NVS (namespace creds: device, mqtt_pw, web_pw, ota_pw)
+Kconfig.projbuild   APN, server URL, default device name (no passwords)
+creds.c/.h          device name + MQTT password from NVS (namespace creds: device, mqtt_pw)
 partitions.csv      16 MB layout with OTA slots
 ```
 
@@ -126,7 +135,8 @@ MQTT client settings to start with:
 - `broker.address.uri = "mqtts://mqtt.rmx.lt:8883"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
   (or `certificate = <isrg-root-x1+x2 PEM>` to trust only those roots)
 - `credentials.username/password` from NVS (username = device name); client id is forced to the username by the broker
-- `session.keepalive = 60`, `session.last_will` → `mower/probe-device/status` (the old device login `probe-device` could not write `probe/status/#`; `mower-01` owns `mower/mower-01/#`)
+- `session.keepalive = 60`, `session.last_will` → `mower/<name>/status` (`mower-01` owns `mower/mower-01/#`)
+- `buffer.size = 8192` so one firmware chunk fits; `buffer.out_size = 2048`
 - `buffer.size` ≥ 16–64 KB if the device sends `list`
 - QoS 1 for requests; match responses by `request_id`
 
