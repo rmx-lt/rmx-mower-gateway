@@ -1,7 +1,7 @@
-# Mower-Gateway-Probe-Server-Contract: What the device talks to: rmx-server / rmx-server-app-probe
+# Mower-Gateway-Server-Contract: What the device talks to: rmx-server / rmx-server-app
 
 Sources: [Home](Home) (architecture), `blade-of-grass/CLAUDE.md`,
-`rmx-server-app-probe` README and `internal/protocol` (wire protocol),
+`rmx-server-app` README and `internal/protocol` (wire protocol),
 `rmx-server-infra` `services/mosquitto/config/mosquitto.conf`, `services/mosquitto/config/acl`, `services/caddy/Caddyfile`.
 Re-read those before coding: they are the source of truth and may have changed.
 
@@ -9,7 +9,7 @@ Re-read those before coding: they are the source of truth and may have changed.
 
 | Endpoint | What | TLS |
 |---|---|---|
-| `https://api.rmx.lt/probe/…` | rmx-server-app-probe REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
+| `https://api.rmx.lt/probe/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
 | `mqtts://mqtt.rmx.lt:8883` | Mosquitto 2.1, MQTT 3.1.1/5 over TLS (min TLS 1.2) | LE cert copied from Caddy |
 
 Browsers do not speak MQTT. `https://mqtt.rmx.lt` only tells clients to use `mqtts://mqtt.rmx.lt:8883`.
@@ -34,9 +34,9 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 
 - Trust **ISRG Root X1** and **ISRG Root X2** (both are in ESP-IDF's cert bundle
   `cacrt_all.pem`; Root YE is not, which is fine because the server sends the cross-signs).
-  Copies: [`certs/isrg-root-x1.pem`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/certs/isrg-root-x1.pem),
-  [`certs/isrg-root-x2.pem`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/certs/isrg-root-x2.pem),
-  [`certs/rmx-ca-bundle.pem`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/certs/rmx-ca-bundle.pem) (both). openssl verifies both hosts with either root alone.
+  Copies: [`certs/isrg-root-x1.pem`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/certs/isrg-root-x1.pem),
+  [`certs/isrg-root-x2.pem`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/certs/isrg-root-x2.pem),
+  [`certs/rmx-ca-bundle.pem`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/certs/rmx-ca-bundle.pem) (both). openssl verifies both hosts with either root alone.
 - Verified on the device: mbedTLS + `esp_crt_bundle_attach` (PPP path) and the modem's
   TLS with `isrgx1.pem` (AT path) both validate the chain.
 - Since 0.2.3 the firmware's bundle is **only** `certs/rmx-ca-bundle.pem`
@@ -82,9 +82,9 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 Safety: the mower stops on its own when the link or acks are lost; never rely on the server.
 
 The probe device already uses `mower/probe-device/cmd` → `…/cmd/ack` and `…/status`
-(format in [06](Mower-Gateway-Probe-Plan), "Remote commands").
+(format in [06](Mower-Gateway-Plan), "Remote commands").
 
-## rmx-server-app-probe protocol (the probe target)
+## rmx-server-app protocol (the probe target)
 
 The probe server is a CRUD demo on a `records(time, connection_type, value)` table, over
 HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
@@ -101,7 +101,7 @@ HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
 - The server subscribes `probe/req/+` (QoS 1), answers on `probe/res/<same id>` (QoS 1).
   Client id: 1–64 chars `[A-Za-z0-9_-]`.
 - **Which login can a device use?** `probe-device`. On 8883 the client id is forced to the username, so the device publishes on `probe/req/probe-device` and subscribes `probe/res/probe-device`, `probe/events/records`, `probe/status/server`. `mower-01` cannot reach `probe/#`. `probe-app` is the server's login, not a device's.
-- Requests (`internal/protocol` in rmx-server-app-probe):
+- Requests (`internal/protocol` in rmx-server-app):
 
 ```jsonc
 { "request_id": "<any string, e.g. uuid>", "request": { "op": "list" } }

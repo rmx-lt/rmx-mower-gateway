@@ -1,4 +1,4 @@
-# Mower-Gateway-Probe-ESP-IDF-Environment: ESP-IDF environment on the dev PC
+# Mower-Gateway-ESP-IDF-Environment: ESP-IDF environment on the dev PC
 
 ## Installed toolchain (verified 2026-10-19)
 
@@ -29,7 +29,7 @@ idf.py -p COM6 monitor         # interactive; agents: use a pyserial script inst
 ```
 
 Agents can't use the interactive monitor. Read the log with pyserial (opening the port
-resets the ESP32 — see [Mower-Gateway-Probe-Tools](Mower-Gateway-Probe-Tools)). Pipe `idf.py` output to a file and read it;
+resets the ESP32 — see [Mower-Gateway-Tools](Mower-Gateway-Tools)). Pipe `idf.py` output to a file and read it;
 `| Select-Object -Last N` buffers until the command ends.
 
 Read-only chip check: `python -m esptool --port COM6 flash-id`.
@@ -68,7 +68,7 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 ```
 
 Notes:
-- The probe firmware uses [`partitions.csv`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/partitions.csv): NVS 24 KB, otadata, two
+- The probe firmware uses [`partitions.csv`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/partitions.csv): NVS 24 KB, otadata, two
   **4 MB OTA slots**, ~7.9 MB `storage`. Its image is 833 KB (2026-10-19).
 - The default partition table has a **1 MB** factory app. The smoke test
   (esp_modem + PPP + esp_http_client + esp-mqtt + full cert bundle) is already

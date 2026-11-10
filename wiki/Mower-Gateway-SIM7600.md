@@ -1,4 +1,4 @@
-# Mower-Gateway-Probe-SIM7600: SIM7600G-H modem
+# Mower-Gateway-SIM7600: SIM7600G-H modem
 
 SIMCom LTE Cat-4 module (150/50 Mbit/s), 3G/2G fallback, GNSS. Local manuals
 (PDF): `C:\Repos\LilyGo-Modem-Series\datasheet\SIM7600X\` — AT Command Manual V3.00,

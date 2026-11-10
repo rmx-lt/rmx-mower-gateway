@@ -1,4 +1,4 @@
-# Mower-Gateway-Probe-Sources: Sources
+# Mower-Gateway-Sources: Sources
 
 ## Measured on the hardware (2026-10-19)
 
@@ -20,7 +20,7 @@
   `command/src/esp_modem_modules.cpp`, `examples/pppos_client`, `examples/simple_cmux_client`, `Kconfig`.
 - ESP-IDF v6.1 (`C:\esp\v6.1\esp-idf`): component list (no `mqtt`, no `json`), cert bundle.
 - Blade of Grass: `blade-of-grass` README and `CLAUDE.md`,
-  `rmx-server-app-probe` (README, `internal/protocol`, `internal/server`, `internal/auth`),
+  `rmx-server-app` (README, `internal/protocol`, `internal/server`, `internal/auth`),
   `rmx-server-infra/services/mosquitto/config` and `services/caddy/Caddyfile`.
 
 ## Web

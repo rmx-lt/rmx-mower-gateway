@@ -1,9 +1,9 @@
-# Mower-Gateway-Probe-PPP: esp_modem + PPP on this board (the chosen data path)
+# Mower-Gateway-PPP: esp_modem + PPP on this board (the chosen data path)
 
 Component: `espressif/esp_modem` **2.1.0** (registry) · source + examples:
 `C:\Repos\esp-protocols\components\esp_modem` · docs:
 <https://docs.espressif.com/projects/esp-protocols/esp_modem/docs/latest/index.html>.
-Working reference code: [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/tools/ppp_smoke/main/ppp_smoke.c).
+Working reference code: [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/ppp_smoke/main/ppp_smoke.c).
 
 ## Why PPP
 
