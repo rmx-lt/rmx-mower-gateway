@@ -30,6 +30,7 @@ static char s_req_topic[96];
 static char s_res_topic[96];
 static char s_cmd_topic[96];
 static char s_ack_topic[96];
+static char s_status_topic[96];   /* retained online / offline, also the last will */
 static mqtt_link_cmd_cb_t s_cmd_cb;
 static int s_res_sub_msg_id = -1;
 static int64_t s_connect_started_us;
@@ -107,7 +108,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         s_connect_started_us = esp_timer_get_time();
         break;
     case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "connected as %s in %lld ms (session present %d)", CONFIG_PROBE_MQTT_USERNAME,
+        ESP_LOGI(TAG, "connected as %s in %lld ms (session present %d)", creds_device_name(),
                  (esp_timer_get_time() - s_connect_started_us) / 1000, e->session_present);
         xEventGroupSetBits(s_ev, CONNECTED);
         s_res_sub_msg_id = esp_mqtt_client_subscribe_single(s_client, s_res_topic, 1);
@@ -116,9 +117,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         if (s_cmd_cb) {
             esp_mqtt_client_subscribe_single(s_client, s_cmd_topic, 1);
         }
-        if (CONFIG_PROBE_MQTT_STATUS_TOPIC[0]) {
-            esp_mqtt_client_publish(s_client, CONFIG_PROBE_MQTT_STATUS_TOPIC, "online", 0, 1, 1);
-        }
+        esp_mqtt_client_publish(s_client, s_status_topic, "online", 0, 1, 1);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "disconnected");
@@ -161,21 +160,23 @@ esp_err_t mqtt_link_start(void)
     }
     s_ev = xEventGroupCreate();
     s_req_lock = xSemaphoreCreateMutex();
-    snprintf(s_req_topic, sizeof(s_req_topic), "probe/req/%s", CONFIG_PROBE_MQTT_USERNAME);
-    snprintf(s_res_topic, sizeof(s_res_topic), "probe/res/%s", CONFIG_PROBE_MQTT_USERNAME);
-    snprintf(s_cmd_topic, sizeof(s_cmd_topic), "mower/%s/cmd", CONFIG_PROBE_MQTT_USERNAME);
-    snprintf(s_ack_topic, sizeof(s_ack_topic), "mower/%s/cmd/ack", CONFIG_PROBE_MQTT_USERNAME);
+    const char *name = creds_device_name();
+    snprintf(s_req_topic, sizeof(s_req_topic), "probe/req/%s", name);
+    snprintf(s_res_topic, sizeof(s_res_topic), "probe/res/%s", name);
+    snprintf(s_cmd_topic, sizeof(s_cmd_topic), "mower/%s/cmd", name);
+    snprintf(s_ack_topic, sizeof(s_ack_topic), "mower/%s/cmd/ack", name);
+    snprintf(s_status_topic, sizeof(s_status_topic), "mower/%s/status", name);
 
     esp_mqtt_client_config_t cfg = {
         .broker.address.uri = CONFIG_PROBE_MQTT_URI,
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
-        .credentials.username = CONFIG_PROBE_MQTT_USERNAME,
-        .credentials.client_id = CONFIG_PROBE_MQTT_USERNAME,   /* the broker forces it anyway */
+        .credentials.username = name,
+        .credentials.client_id = name,   /* the broker forces it anyway */
         .credentials.authentication.password = s_password,
         .session.keepalive = 60,                  /* below typical CGNAT idle timeouts */
         .session.message_retransmit_timeout = 10000,   /* LTE round trips + TLS */
         .session.last_will = {
-            .topic = CONFIG_PROBE_MQTT_STATUS_TOPIC[0] ? CONFIG_PROBE_MQTT_STATUS_TOPIC : NULL,
+            .topic = s_status_topic,
             .msg = "offline",
             .qos = 1,
             .retain = 1,
@@ -245,7 +246,7 @@ esp_err_t mqtt_link_publish_own(const char *subtopic, const char *payload, bool 
         return ESP_ERR_INVALID_STATE;
     }
     char topic[96];
-    snprintf(topic, sizeof(topic), "mower/%s/%s", CONFIG_PROBE_MQTT_USERNAME, subtopic);
+    snprintf(topic, sizeof(topic), "mower/%s/%s", creds_device_name(), subtopic);
     if (esp_mqtt_client_publish(s_client, topic, payload, 0, 1, retain) < 0) {
         ESP_LOGE(TAG, "publish on %s failed", topic);
         return ESP_FAIL;
@@ -273,9 +274,7 @@ void mqtt_link_stop(void)
     if (!s_client) {
         return;
     }
-    if (CONFIG_PROBE_MQTT_STATUS_TOPIC[0]) {
-        esp_mqtt_client_publish(s_client, CONFIG_PROBE_MQTT_STATUS_TOPIC, "offline", 0, 1, 1);
-    }
+    esp_mqtt_client_publish(s_client, s_status_topic, "offline", 0, 1, 1);
     esp_mqtt_client_stop(s_client);
     esp_mqtt_client_destroy(s_client);
     s_client = NULL;

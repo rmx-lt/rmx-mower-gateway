@@ -192,7 +192,7 @@ esp_err_t https_api_login(void)
         return err;
     }
     s_cookie[0] = '\0';
-    char *json = probe_proto_build_login(CONFIG_PROBE_WEB_USERNAME, password);
+    char *json = probe_proto_build_login(creds_device_name(), password);
     memset(password, 0, sizeof(password));
     int status = request(HTTP_METHOD_POST, "/api/auth/login", json);
     free(json);

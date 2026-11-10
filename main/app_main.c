@@ -3,8 +3,8 @@
  * rmx-server-app-probe over LTE.
  *
  * board -> cell (PPP) -> HTTPS (health, login, create, list) -> MQTT
- * (connect, create + list over probe/req|res/<user>) -> stay online and run
- * remote commands from mower/<user>/cmd (see remote_cmd.h).
+ * (connect, create + list over probe/req|res/<name>) -> stay online and run
+ * remote commands from mower/<name>/cmd (see remote_cmd.h).
  */
 #include <stdio.h>
 #include <time.h>
@@ -21,6 +21,7 @@
 #include "nvs_flash.h"
 #include "board.h"
 #include "cell.h"
+#include "creds.h"
 #include "gnss.h"
 #include "https_api.h"
 #include "mqtt_link.h"
@@ -127,6 +128,7 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+    ESP_LOGI(TAG, "booting as %s", creds_device_name());
     ota_boot_init();   /* a new image rolls back unless MQTT connects in time */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
