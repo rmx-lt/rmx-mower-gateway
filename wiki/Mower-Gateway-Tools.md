@@ -71,5 +71,5 @@ Verified on hardware 2026-11-08:
 - A changed `version.txt` is only picked up after a CMake reconfigure: delete `.pio/build/probe/CMakeCache.txt`, then build.
 - Flashing with `pio ... -t upload` keeps NVS (credentials); the CH9102 auto-reset works with the default settings (no `monitor_rts`/`monitor_dtr` override needed); `serial_log.py` also works as before.
 - The PlatformIO-built image passed the PPP/MQTT self-test. An HTTPS OTA to a PlatformIO-built, signed 0.2.4 image succeeded before firmware download moved to MQTT (`ota_0` to `ota_1`, confirmed).
-- 2026-11-10: `pio run -e probe` signed `firmware.bin` (729088 bytes) and `pio run -e probe -t upload --upload-port COM6` booted that MQTT-only image. The self-test passed. An MQTT `ota` was not run: the server was not serving firmware.
+- 2026-11-10: `pio run -e probe` signed `firmware.bin` (729088 bytes; RAM 20752/327680, flash 706493/4194304). USB flash of 0.3.0 on COM6 passed the self-test. `0.3.1.bin` (same tree, version string only) was copied to the server firmware dir and installed by `tools\mqtt_cmd.ps1 ota -Version 0.3.1 -Size 729088`. See [Mower-Gateway-Plan](Mower-Gateway-Plan).
 - `tools/release.ps1` is idf.py only; for a PlatformIO image upload `firmware.bin` as `<version>.bin` by hand and send `tools\mqtt_cmd.ps1 ota`. Use PowerShell's `ssh`/`scp` (Git Bash's has no key).

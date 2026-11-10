@@ -32,7 +32,7 @@ Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /probe/health
 Firmware   main/ (repo root): MQTT login from NVS (default mower-01) on mower/<name>/req|res and mower/<name>/fw/…
 Logins     device name in NVS (default mower-01) = MQTT login + topic name; password only mqtt_pw (tools/provision_nvs.ps1 -Device)
 Commands   PC → mower/<name>/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified
-OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. HTTPS OTA 0.2.0 → 0.2.1 was verified 2026-10-22. MQTT chunks are the path now; an over-the-air run is not measured yet (https://github.com/rmx-lt/rmx-mower-gateway/issues/44).
+OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. Verified 2026-11-10: 0.3.0 USB flash, unknown file `not_found`, reset at 10% then clean retry, 0.3.1 confirmed on ota_1 (97 s, 729088 bytes).
 GNSS       "gps": true on create; AT via esp_modem_pause_net (~2 s, links survive) — fix and no-fix verified
 ```
 

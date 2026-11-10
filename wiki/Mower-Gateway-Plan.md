@@ -30,8 +30,8 @@ has no HTTPS client.
 - [x] 3 min online afterwards: PPP and MQTT stayed up (keepalive 60 s), heap stable
       (4.39 MB free, 284 KB internal)
 - App image on that date: 833 KB in a 4 MB OTA slot. The 2026-11-10 PlatformIO `probe`
-  image is smaller: `text` 576417, `data` 146044, `bss` 9289; the signed `firmware.bin`
-  is 729088 bytes.
+  image (0.3.0, and the 0.3.1 OTA target of the same tree) is RAM 20752/327680, flash
+  706493/4194304; the signed `firmware.bin` is 729088 bytes.
 
 ### Remote commands over MQTT — verified 2026-10-19
 
@@ -97,12 +97,16 @@ the running one), size, whole-image SHA-256 against the chunk header, then `esp_
 - HTTPS OTA, verified 2026-10-22, before this path: USB flash of 0.2.0 → `ota_0`, then
   0.2.0 → 0.2.1 (856064 bytes) over HTTPS, confirmed on `ota_1`. A second `ota` of 0.2.1
   returned `same_version`.
-- 2026-11-10: USB flash of the MQTT-only 0.2.4 image on `ota_0` (state valid). MQTT self-test
-  passed (create/list), and `tools\mqtt_cmd.ps1 ping` was answered. An `info` request on
-  `mower/mower-01/fw/req` was published and got no answer; the server compose has no
-  `FIRMWARE_DIR`, so it does not subscribe. The MQTT update, a mid-download retry, and
-  first-boot confirm are not measured on the board:
-  [rmx-mower-gateway#44](https://github.com/rmx-lt/rmx-mower-gateway/issues/44).
+- MQTT OTA, verified 2026-11-10 on the board (login `mower-01`). USB flash of 0.3.0
+  booted `ota_0`, state valid, MQTT self-test passed. `ota` of `missing.bin` acked
+  `started`, then `not_found` (`unknown firmware file`); `status` stayed version 0.3.0,
+  partition `ota_0`, confirmed. `ota` of `0.3.1.bin` (729088 bytes, 178 chunks of 4096)
+  reached 10% (chunk 18) and a reset came back as 0.3.0 on `ota_0`. The same command
+  again downloaded from chunk 1, logged `image SHA-256 matches the chunk header`,
+  `update to 0.3.1 written in 97 s`, rebooted to `ota_1` (state pending), and logged
+  `image 0.3.1 confirmed` on the first MQTT connect. `status`: version 0.3.1, partition
+  `ota_1`, confirmed, ota idle. The server `info` for `0.3.1.bin` matched that size and
+  the file's SHA-256. A tampered image was not sent to the device.
 - Other failure paths (crash on boot, wrong key, power cut) are not verified on the board:
   [rmx-mower-gateway#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15).
 

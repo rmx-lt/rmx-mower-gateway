@@ -15,10 +15,11 @@ NVS device name (default `mower-01`), sends `create`/`list` on `mower/<name>/req
 the answers on `mower/<name>/res`. It takes remote commands from the PC on
 `mower/<name>/cmd` and replies on `…/cmd/ack`. A new image is requested as MQTT chunks on
 `mower/<name>/fw/req` and written from `mower/<name>/fw/chunk`. The firmware has no HTTPS
-client. A USB flash of this image (0.2.4, 2026-11-10) passed the MQTT self-test. An
-over-the-air run is not measured yet: the server was not serving firmware
-([rmx-mower-gateway#44](https://github.com/rmx-lt/rmx-mower-gateway/issues/44)). Details:
-[Mower-Gateway-Plan](Mower-Gateway-Plan).
+client. Verified 2026-11-10: a USB flash of 0.3.0 passed the MQTT self-test, an unknown
+file returned `not_found` and left 0.3.0 running, and `ota` of `0.3.1.bin` (729088 bytes,
+178 chunks) wrote the image, matched the chunk-header SHA-256, rebooted into `ota_1`, and
+confirmed on the first MQTT connect. A reset at 10% was a clean retry from the first chunk.
+Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
 
 ## Build, configure, flash (PowerShell)
 
@@ -117,9 +118,10 @@ The `ota` command: `{"id":"…","cmd":"ota","version":"0.2.5","file":"0.2.5.bin"
 `file` defaults to `<version>.bin`. It acks `started` at once, then `done` before the restart,
 or an error: `busy`, `same_version`, `low_signal`, `bad_image` (wrong project or version, bad
 signature or SHA-256), `bad_size`, `download_failed`, `not_found`, `bad_request`, `internal`,
-`failed`. The signed PlatformIO image of 0.2.4 (2026-11-10) is 729088 bytes, plus a 64-byte
-header on each 4096-byte chunk. The esp-mqtt receive buffer is 8192 bytes so that frame
-arrives in one event; a fragmented `MQTT_EVENT_DATA` is still reassembled.
+`failed`. The signed PlatformIO image of 0.3.0 / 0.3.1 (2026-11-10) is 729088 bytes
+(RAM 20752/327680, flash 706493/4194304), plus a 64-byte header on each 4096-byte chunk.
+The 0.3.1 download took 97 s (178 chunks). The esp-mqtt receive buffer is 8192 bytes so
+that frame arrives in one event; a fragmented `MQTT_EVENT_DATA` is still reassembled.
 
 ## Layout
 
