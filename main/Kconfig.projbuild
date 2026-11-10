@@ -4,12 +4,12 @@ menu "rmx probe"
 
     config PROBE_DEVICE_NAME
         string "Default device name (used when NVS has none)"
-        default "probe-device"
+        default "mower-01"
         help
             Used only when NVS has no creds/device key. The name is the MQTT
             username and client id (on 8883 the broker forces client id =
-            username), the web and firmware-download login, and the <name> in
-            probe/req|res/<name> and mower/<name>/cmd|ack|status.
+            username) and the <name> in mower/<name>/req|res|cmd|ack|status.
+            The HTTPS login is separate (NVS creds/https_user, default probe-device).
 
     config PROBE_APN
         string "Cellular APN"

@@ -8,7 +8,7 @@
 # Bump version.txt first: the device refuses the version it already runs.
 param(
     [switch]$Send,
-    [string]$Device = 'probe-device',
+    [string]$Device = 'mower-01',
     [string]$RemoteDir = '/opt/rmx-vps/services/caddy/firmware/probe'
 )
 $ErrorActionPreference = 'Stop'

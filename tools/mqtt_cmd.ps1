@@ -1,4 +1,4 @@
-# Send a remote command to the probe device and print its reply.
+# Send a remote command to the gateway and print its reply.
 #
 #   tools\mqtt_cmd.ps1 ping
 #   tools\mqtt_cmd.ps1 status
@@ -27,7 +27,7 @@ param(
     [string]$OtaBase = 'https://api.rmx.lt/fw/probe',
     [int]$TtlS = 60,          # expires_at = now + TtlS (0 = no expiry, negative = already expired, for tests)
     [int]$TimeoutS = 45,
-    [string]$Device = 'probe-device'
+    [string]$Device = 'mower-01'
 )
 $ErrorActionPreference = 'Stop'
 $rr = 'C:\Program Files\mosquitto\mosquitto_rr.exe'

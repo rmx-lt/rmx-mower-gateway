@@ -142,7 +142,7 @@ static void ota_task(void *arg)
     };
     char ota_pw[CREDS_MAX_LEN];
     if (creds_get(CREDS_OTA_PW, ota_pw, sizeof(ota_pw)) == ESP_OK && ota_pw[0]) {
-        http.username = creds_device_name();
+        http.username = creds_https_user();
         http.password = ota_pw;
         http.auth_type = HTTP_AUTH_TYPE_BASIC;
     }

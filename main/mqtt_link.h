@@ -12,16 +12,16 @@ typedef void (*mqtt_link_cmd_cb_t)(const char *data, size_t len);
 /* Set before mqtt_link_start(). */
 void mqtt_link_set_cmd_handler(mqtt_link_cmd_cb_t cb);
 
-/* Starts the client (auto-reconnect) and subscribes probe/res/<user>,
- * probe/events/records, probe/status/server and (with a cmd handler)
+/* Starts the client (auto-reconnect) and subscribes mower/<user>/res,
+ * mower/events/records, mower/status/server and (with a cmd handler)
  * mower/<user>/cmd on every connect. */
 esp_err_t mqtt_link_start(void);
 
-/* Waits until connected and probe/res/<user> is subscribed. */
+/* Waits until connected and mower/<user>/res is subscribed. */
 bool mqtt_link_wait_ready(int timeout_ms);
 
-/* Publishes a request on probe/req/<user> (QoS 1) and waits for the matching
- * response on probe/res/<user>. One request at a time. */
+/* Publishes a request on mower/<user>/req (QoS 1) and waits for the matching
+ * response on mower/<user>/res. One request at a time. */
 esp_err_t mqtt_link_request(probe_op_t op, int64_t id, const char *value,
                             probe_result_t *out, int timeout_ms);
 

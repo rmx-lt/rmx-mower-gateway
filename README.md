@@ -26,9 +26,9 @@ python -I -u tools\serial_log.py COM6 120 --until SELF-TEST
 
 The device name and the passwords (MQTT, web, firmware download) live only in the board's NVS
 partition (`creds` namespace), so one image fits every board: `tools\provision_nvs.ps1 -Device <name>`
-switches the identity without a rebuild. The name is the MQTT, web and firmware-download login
-and the `<name>` in `probe/req|res/<name>` and `mower/<name>/…`; without a `device` key the board
-boots as `probe-device`. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
+switches the identity without a rebuild. The name is the MQTT login and the `<name>` in
+`mower/<name>/…`; without a `device` key the board boots as `mower-01`. The legacy HTTPS login
+(web and firmware download) is the separate NVS key `https_user` (default `probe-device`). `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
 
 ## Layout
 

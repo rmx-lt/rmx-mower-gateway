@@ -3,7 +3,7 @@
  * rmx-server-app over LTE.
  *
  * board -> cell (PPP) -> HTTPS (health, login, create, list) -> MQTT
- * (connect, create + list over probe/req|res/<name>) -> stay online and run
+ * (connect, create + list over mower/<name>/req|res) -> stay online and run
  * remote commands from mower/<name>/cmd (see remote_cmd.h).
  */
 #include <stdio.h>

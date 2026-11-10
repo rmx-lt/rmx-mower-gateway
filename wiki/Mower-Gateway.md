@@ -12,9 +12,9 @@ to **rmx-server** and talks to **rmx-server-app** with **MQTT over TLS** and **H
 
 Probe firmware working on the hardware (2026-10-19): over LTE (PPP) it logs in to the
 broker as `probe-device`, sends `create`/`list` on `probe/req/probe-device` and gets the
-answers on `probe/res/probe-device`; over HTTPS it logs in (session cookie + `Origin`)
+answers on `probe/res/probe-device`; since issue 53 the link is `mower-01` on `mower/mower-01/req|res` (code and server done, hardware test pending); over HTTPS it logs in (session cookie + `Origin`)
 and creates/lists records. It also takes remote commands from the PC on
-`mower/probe-device/cmd` and replies on `…/cmd/ack`. Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
+`mower/<name>/cmd` and replies on `…/cmd/ack`. Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
 
 ## Build, configure, flash (PowerShell)
 
@@ -30,9 +30,10 @@ python -I -u tools\serial_log.py COM6 120 --until SELF-TEST
 
 The device name and the passwords (MQTT, web, firmware download) live only in the board's NVS
 partition (`creds` namespace), so one image fits every board: `tools\provision_nvs.ps1 -Device <name>`
-switches the identity without a rebuild. The name is the MQTT, web and firmware-download login
-and the `<name>` in `probe/req|res/<name>` and `mower/<name>/…`; without a `device` key the board
-boots as `probe-device`. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
+switches the identity without a rebuild. The name is the MQTT login and the `<name>` in
+`mower/<name>/req|res|cmd|…`; without a `device` key the board boots as `mower-01`. The legacy
+HTTPS login (web and firmware-download) is the separate NVS key `https_user` (default
+`probe-device`, `-HttpsUser`), because the web and Caddy users keep their old name. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
 
 TLS trusts only ISRG Root X1 + X2 ([`certs/rmx-ca-bundle.pem`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/certs/rmx-ca-bundle.pem)), not
 ESP-IDF's full Mozilla bundle. An `sdkconfig` made before 0.2.3 still has the full bundle:
@@ -74,7 +75,7 @@ The device downloads a new image over HTTPS into the spare app slot (`partitions
 - **Hosting.** `https://api.rmx.lt/fw/probe/<version>.bin` on the VPS (Caddy, HTTP basic
   auth, wiki [Server-Infra](Server-Infra#firmware-images-ota) §10). Only URLs under `CONFIG_PROBE_OTA_URL_PREFIX` are accepted.
 - **Report.** Once a new image has confirmed itself, it tells the server once: a retained
-  `{"version","previous","partition","time"}` on `mower/probe-device/firmware`, and a probe
+  `{"version","previous","partition","time"}` on `mower/<name>/firmware`, and a probe
   record `firmware updated to <version> (from <previous>, <slot>)`.
 - **Retries.** A dropped download resumes where it stopped (HTTP Range), up to 3 times; the
   running firmware is untouched until the whole image checks out.
@@ -86,7 +87,7 @@ mkdir keys
 espsecure generate-signing-key --version 2 --scheme rsa3072 keys\ota_signing_key.pem
 # back up keys\ota_signing_key.pem offline: without it, no more OTA (only a USB flash with a new key)
 idf.py -p COM6 -b 921600 flash
-tools\provision_nvs.ps1      # includes the firmware download password (Caddy basic auth login probe-device)
+tools\provision_nvs.ps1      # includes the firmware download password (Caddy basic auth login = the HTTPS user, probe-device)
 ```
 
 An existing `sdkconfig` keeps its old values: add the OTA block from `sdkconfig.defaults`
