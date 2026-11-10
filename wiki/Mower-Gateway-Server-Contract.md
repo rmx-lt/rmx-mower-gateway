@@ -51,6 +51,20 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 - **SNI is required** for `api.rmx.lt` (Caddy serves several names on one IP). mbedTLS sends
   it automatically; the modem needs `AT+CSSLCFG="enableSNI",0,1`.
 
+## Client certificate listener (port 8884)
+
+Planned in [rmx-server-infra#67](https://github.com/rmx-lt/rmx-server-infra/issues/67), CA in wiki
+Device-CA. What the firmware expects: `mqtts://mqtt.rmx.lt:8884`, the same server certificate as 8883
+(checked against the ISRG bundle), and a client certificate chain (device certificate + issuing CA
+certificate, ECDSA P-256) whose CN is the device name. The device sends no password. Identity =
+CN (`use_identity_as_username`), so the ACL `mower/%u/#` applies unchanged. Until it is live the
+firmware stays on 8883 with its password.
+
+Checked off-board 2026-11-10 against a throwaway Mosquitto 2.1.2 in Docker (`require_certificate true`,
+cafile = throwaway root, CRL, `use_identity_as_username`): the chain file from `device-ca.ps1 sign` with a
+P-256 key connects; the device certificate alone is refused ("unknown ca"), so the chain must be sent
+(the firmware sends it); no certificate is refused. The board itself has not connected to 8884 yet.
+
 ## MQTT broker rules (Mosquitto, `mosquitto.conf` + `acl`)
 
 - `allow_anonymous false`: every connection needs username + password.

@@ -25,6 +25,9 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_NONE=y
 CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE_PATH="certs/rmx-ca-bundle.pem"
+# CSR for the per-device client certificate (main/devcert.c); certificate writing stays off
+CONFIG_MBEDTLS_X509_CREATE_C=y
+CONFIG_MBEDTLS_X509_CRT_WRITE_C=n
 # Large buffers (MQTT list responses) go to PSRAM
 CONFIG_SPIRAM_USE_MALLOC=y
 # OTA: a new image boots as "pending verify" and the bootloader rolls back

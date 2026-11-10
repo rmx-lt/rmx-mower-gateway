@@ -41,6 +41,6 @@ free GPIOs; put new board or chip facts there, and keep probe-specific knowledge
 ## Rules
 
 - This repo is public (Apache-2.0): never commit passwords, tokens, IMEI/ICCID/IMSI, or personal data.
-  Device passwords go in NVS only (`tools/provision_nvs.ps1`), never in `sdkconfig`. Server secrets stay on the VPS; never print them.
+  The board makes its own key (NVS, never printed); the certificate goes in via `tools/provision_cert.ps1`. Fallback passwords go in NVS only (`tools/provision_nvs.ps1`), never in `sdkconfig`. Never run provision_nvs.ps1 on a board that has a key: it wipes NVS. Server secrets stay on the VPS; never print them.
 - VPS changes (new MQTT users, ACL) follow `rmx-server-infra/CLAUDE.md` and need the user's OK.
 - Flashing the board is fine (it's the dev board for this project); say what you flashed.
