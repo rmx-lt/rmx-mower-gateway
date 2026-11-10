@@ -30,15 +30,17 @@ function Get-Secret([string]$EnvName, [string]$Prompt, [bool]$Required) {
     return $v
 }
 
+# Check the environment before asking for any password.
+if (-not $env:IDF_PATH) { throw 'IDF_PATH not set: load the ESP-IDF environment first (. C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1)' }
+$gen = Join-Path $env:IDF_PATH 'components\nvs_flash\nvs_partition_generator\nvs_partition_gen.py'
+if (-not (Test-Path $gen)) { throw "nvs_partition_gen.py not found under IDF_PATH ($env:IDF_PATH)" }
+
 # Same rule as the firmware (main/creds.c): the name goes into MQTT topics.
 if ($Device -cnotmatch '^[A-Za-z0-9_-]{1,32}\z') { throw "-Device: 1-32 letters, digits, '-' or '_'" }
 
 $mqtt = Get-Secret 'RMX_MQTT_PW' "MQTT password ($Device)" $true
 $web = Get-Secret 'RMX_WEB_PW' "Web login password ($Device)" $true
 $ota = Get-Secret 'RMX_OTA_PW' 'Firmware download password (empty = none)' $false
-
-$gen = Join-Path $env:IDF_PATH 'components\nvs_flash\nvs_partition_generator\nvs_partition_gen.py'
-if (-not (Test-Path $gen)) { throw 'IDF_PATH not set: load the ESP-IDF environment first' }
 
 function Q([string]$s) { '"' + $s.Replace('"', '""') + '"' }
 $dir = Join-Path ([IO.Path]::GetTempPath()) ('rmx-nvs-' + [Guid]::NewGuid().ToString('N'))
