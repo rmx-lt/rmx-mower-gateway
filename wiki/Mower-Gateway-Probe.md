@@ -21,15 +21,18 @@ and creates/lists records. It also takes remote commands from the PC on
 ```powershell
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 idf.py set-target esp32     # first time only
-idf.py menuconfig           # "rmx probe": APN, MQTT and web logins (no passwords)
+idf.py menuconfig           # "rmx probe": APN, server URLs (no logins, no passwords)
 idf.py build
 idf.py -p COM6 -b 921600 flash
-tools\provision_nvs.ps1      # once per board: passwords go to NVS (hidden prompts), not into the image
+tools\provision_nvs.ps1      # once per board: device name + passwords go to NVS, not into the image
 python -I -u tools\serial_log.py COM6 120 --until SELF-TEST
 ```
 
-The passwords (MQTT, web, firmware download) live only in the board's NVS partition (`creds` namespace).
-`idf.py flash` and OTA leave them alone; `idf.py erase-flash` removes them.
+The device name and the passwords (MQTT, web, firmware download) live only in the board's NVS
+partition (`creds` namespace), so one image fits every board: `tools\provision_nvs.ps1 -Device <name>`
+switches the identity without a rebuild. The name is the MQTT, web and firmware-download login
+and the `<name>` in `probe/req|res/<name>` and `mower/<name>/…`; without a `device` key the board
+boots as `probe-device`. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it.
 
 TLS trusts only ISRG Root X1 + X2 ([`certs/rmx-ca-bundle.pem`](https://github.com/rmx-lt/rmx-mower-gateway-probe/blob/development/certs/rmx-ca-bundle.pem)), not
 ESP-IDF's full Mozilla bundle. An `sdkconfig` made before 0.2.3 still has the full bundle:
