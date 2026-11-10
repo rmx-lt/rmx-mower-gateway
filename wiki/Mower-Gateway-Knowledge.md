@@ -26,11 +26,11 @@ Control    PWRKEY GPIO4 (HIGH 500 ms = on/off toggle), FLIGHT GPIO25 = HIGH, DTR
 PC         COM6 (CH9102); ESP-IDF v6.1: . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 SIM/APN    Tele2 LT "PILDYK", APN "internet", LTE band 1, CGNAT IP
 Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqtt
-Server     mqtts://mqtt.rmx.lt:8883 (login required, client id := username). Firmware files are the same *.bin names as /fw/probe/, served as MQTT chunks.
+Server     mqtts://mqtt.rmx.lt:8884 (client certificate, client id := CN; 8883 is the password listener for the app and PC tools). Firmware files are the same *.bin names as /fw/probe/, served as MQTT chunks.
 Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain)
 Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /probe/health; the gateway firmware does not.
-Firmware   main/ (repo root): MQTT login from NVS (default mower-01) on mower/<name>/req|res and mower/<name>/fw/…
-Logins     certificate: board-made P-256 key + chain in NVS (tools/provision_cert.ps1), name = CN, port 8884, no password. Fallback until the live switch: device name in NVS (default mower-01) + mqtt_pw (tools/provision_nvs.ps1), port 8883. See Mower-Gateway "Identity"
+Firmware   main/ (repo root): MQTT login with the client certificate (name = CN) on mower/<name>/req|res and mower/<name>/fw/…
+Logins     certificate only: board-made P-256 key + chain in NVS (tools/provision_cert.ps1 -Name <name>), name = CN, port 8884, no password anywhere on the board (live-verified 2026-11-11). See Mower-Gateway "Identity"
 Commands   PC → mower/<name>/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified
 OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. Verified 2026-11-10: 0.3.0 USB flash, unknown file `not_found`, reset at 10% then clean retry, 0.3.1 confirmed on ota_1 (97 s, 729088 bytes).
 GNSS       "gps": true on create; AT via esp_modem_pause_net (~2 s, links survive) — fix and no-fix verified

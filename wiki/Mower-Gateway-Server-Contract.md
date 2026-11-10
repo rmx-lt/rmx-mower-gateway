@@ -53,12 +53,12 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 
 ## Client certificate listener (port 8884)
 
-Planned in [rmx-server-infra#67](https://github.com/rmx-lt/rmx-server-infra/issues/67), CA in wiki
-Device-CA. What the firmware expects: `mqtts://mqtt.rmx.lt:8884`, the same server certificate as 8883
+Live since 2026-11-11 (see [rmx-server-infra#67](https://github.com/rmx-lt/rmx-server-infra/issues/67)), CA in wiki
+Device-CA. The board logged in here with certificate serial 01, CN `mower-01`. What the firmware uses: `mqtts://mqtt.rmx.lt:8884`, the same server certificate as 8883
 (checked against the ISRG bundle), and a client certificate chain (device certificate + issuing CA
 certificate, ECDSA P-256) whose CN is the device name. The device sends no password. Identity =
-CN (`use_identity_as_username`), so the ACL `mower/%u/#` applies unchanged. Until it is live the
-firmware stays on 8883 with its password.
+CN (`use_identity_as_username`), so the ACL `mower/%u/#` applies unchanged. The firmware has no
+password login any more (removed 2026-11-11); 8883 with passwords stays for the app and the PC tools.
 
 Checked off-board 2026-11-10 against a throwaway Mosquitto 2.1.2 in Docker (`require_certificate true`,
 cafile = throwaway root, CRL, `use_identity_as_username`): the chain file from `device-ca.ps1 sign` with a
@@ -80,7 +80,8 @@ P-256 key connects; the device certificate alone is refused ("unknown ca"), so t
     read `probe/res/probe-device`, `probe/events/#`, `probe/status/#`.
 - Logins that exist: `app`, `mower-01`, `probe-app`, `probe-device` (legacy). Passwords live only on the
   server (`services/mosquitto/data/credentials.txt`, root 0600). **Never print or commit them.**
-  The user must provide the device's password (into NVS with `tools/provision_nvs.ps1`, not committed).
+  The `mower-01` password is no longer used by the device (it logs in with its certificate); retiring that
+  server-side login is a server task.
 - Mosquitto accepts a SUBSCRIBE to a forbidden topic but never delivers to it (no error!).
   A PUBLISH to a forbidden topic is silently dropped (MQTT 3.1.1).
 - Bad login → CONNACK 5 "not authorized" (verified from the device).

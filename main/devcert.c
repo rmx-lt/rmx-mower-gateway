@@ -152,7 +152,7 @@ esp_err_t devcert_init(void)
         err = generate_key();
     }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "no usable key (%s): password login only", esp_err_to_name(err));
+        ESP_LOGE(TAG, "no usable key (%s): no MQTT login", esp_err_to_name(err));
         return err;
     }
     s_have_key = true;
@@ -171,7 +171,7 @@ esp_err_t devcert_init(void)
             ESP_LOGI(TAG, "client certificate for %s", s_cn);
             return ESP_OK;
         }
-        ESP_LOGE(TAG, "stored certificate rejected (%s): password login only", why);
+        ESP_LOGE(TAG, "stored certificate rejected (%s): no MQTT login", why);
     } else {
         ESP_LOGI(TAG, "no client certificate in NVS");
     }
@@ -186,6 +186,11 @@ const char *devcert_key_pem(void) { return s_chain ? s_key : NULL; }
 void devcert_print_csr(const char *cn)
 {
     if (!s_have_key) {
+        return;
+    }
+    if (!cn || !valid_cn(cn)) {
+        printf("RMX-CERT-ERR name (letters, digits, '-', '_', 1..%d)\n", CREDS_DEVICE_MAX);
+        fflush(stdout);
         return;
     }
     mbedtls_pk_context key;
@@ -277,8 +282,8 @@ static void console_task(void *arg)
                 cap[cap_len + l] = '\n';
                 cap_len += l + 1;
             }
-        } else if (strcmp(line, "RMX-CSR") == 0) {
-            devcert_print_csr(creds_device_name());
+        } else if (strncmp(line, "RMX-CSR ", 8) == 0) {
+            devcert_print_csr(line + 8);
         } else if (strcmp(line, "RMX-CERT-CLEAR") == 0) {
             esp_err_t err = nvs_write(NVS_CHAIN, NULL);
             printf(err == ESP_OK ? "RMX-CERT-OK cleared\n" : "RMX-CERT-ERR nvs\n");

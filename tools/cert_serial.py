@@ -1,8 +1,9 @@
 """Serial side of tools/provision_cert.ps1 (wiki Mower-Gateway-Tools).
 
-  python -I tools/cert_serial.py csr   COM6 out.csr          reset the board, save its CSR
+  python -I tools/cert_serial.py csr   COM6 out.csr NAME     reset the board, ask for a CSR with CN NAME, save it
+  python -I tools/cert_serial.py csr-now COM6 out.csr NAME   the same without a reset
   python -I tools/cert_serial.py send  COM6 chain.pem        send the signed chain, wait for the answer
-  python -I tools/cert_serial.py clear COM6                  delete the stored certificate (password login again)
+  python -I tools/cert_serial.py clear COM6                  delete the stored certificate (the board stops connecting)
 
 The board keeps its key and every other NVS key; only the "chain" key is written or erased
 (main/devcert.c). Nothing secret passes through here: the CSR and the chain are public.
@@ -66,16 +67,19 @@ def main():
     cmd, port = sys.argv[1], sys.argv[2]
     if cmd == "csr":
         s = open_port(port, True)
-        seen = read_until(s, END, 30)
+        time.sleep(4)   # the command task starts after about 2 s
+        s.reset_input_buffer()
+        send_lines(s, ["RMX-CSR " + sys.argv[4]])
+        seen = read_until(s, END, 15)
         if seen is None:
-            sys.exit("no CSR within 30 s: the board may already hold a certificate (send RMX-CSR by 'csr-now')")
+            sys.exit("no CSR answer: " + (answer(s, 1) or "board silent"))
         out = seen.split(BEGIN, 1)[1].split(END, 1)[0].strip()
         open(sys.argv[3], "w", newline="\n").write(out + "\n")
         print("CSR saved to", sys.argv[3])
     elif cmd == "csr-now":   # board already running, with or without certificate
         s = open_port(port, False)
         time.sleep(0.5)
-        send_lines(s, ["RMX-CSR"])
+        send_lines(s, ["RMX-CSR " + sys.argv[4]])
         seen = read_until(s, END, 10)
         if seen is None:
             sys.exit("no CSR answer")
