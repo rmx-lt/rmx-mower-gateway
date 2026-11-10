@@ -1,7 +1,7 @@
 # Mower-Gateway: rmx-mower-gateway
 
-Part of **Blade of Grass** (open-source robotic mower). A learning/diagnostic firmware for
-the cellular link of the future rmx-mower: an ESP32 + SIM7600G-H board that connects over LTE
+Part of **Blade of Grass** (open-source robotic mower). Firmware for
+the cellular link of the rmx-mower: an ESP32 + SIM7600G-H board that connects over LTE
 to **rmx-server** and talks to **rmx-server-app** with **MQTT over TLS** and **HTTPS**.
 
 - Hardware: LilyGo T-SIM7600 (ESP32-WROVER-E N16R8, SIM7600G-H)
