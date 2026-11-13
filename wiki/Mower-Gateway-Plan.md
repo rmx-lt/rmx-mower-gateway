@@ -162,8 +162,13 @@ MQTT client settings to start with:
    A second identity needs its own Mosquitto user + ACL on the VPS and its own web user; two boards on
    one login kick each other off (client id = username).
 
-Open questions: modem firmware update B04 → B06 ([#20](https://github.com/rmx-lt/rmx-mower-gateway/issues/20)); whether the probe should
-exercise the real `mower/mower-01/…` topics ([#21](https://github.com/rmx-lt/rmx-mower-gateway/issues/21)).
+7. **Real mower topics** ([#21](https://github.com/rmx-lt/rmx-mower-gateway/issues/21), decided 2026-11-13): yes. The firmware
+   uses only `mower/<name>/…` (`main/mqtt_link.c`), where `<name>` is the certificate CN (e.g. `mower-01`), and the
+   shared `mower/events/records` and `mower/status/server`. The `probe/…` topics and the `probe-device` login in
+   the 2026-10-19 entries above are history; the protocol itself is defined in
+   [rmx-lt/blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
+
+Open questions: modem firmware update B04 → B06 ([#20](https://github.com/rmx-lt/rmx-mower-gateway/issues/20)).
 
 ## Risks / gotchas to remember
 
