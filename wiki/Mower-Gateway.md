@@ -119,9 +119,8 @@ The byte layout is wiki [Server-App](Server-App#firmware-over-mqtt). The device 
   Secure Boot: no eFuses are burned, and USB flashing works as before.
 - **Whole-image SHA-256.** Every chunk header carries the SHA-256 of the file. The device
   hashes the bytes it wrote and compares them before `esp_ota_set_boot_partition`.
-- **File name.** The `ota` command's `version` selects `<version>.bin`, the same files Caddy
-  serves at `https://api.rmx.lt/fw/probe/<version>.bin` (wiki
-  [Server-Infra](Server-Infra#firmware-images-ota) §10). An optional `file` (or the last
+- **File name.** The `ota` command's `version` selects `<version>.bin`, a file in the server's
+  firmware folder (wiki [Server-Infra](Server-Infra#firmware-images-ota) §10). An optional `file` (or the last
   segment of a legacy `url`) names the file instead. The device does not open HTTPS.
 - **Report.** Once a new image has confirmed itself, it tells the server once: a retained
   `{"version","previous","partition","time"}` on `mower/<name>/firmware`, and a probe

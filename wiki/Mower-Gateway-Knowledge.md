@@ -26,7 +26,7 @@ Control    PWRKEY GPIO4 (HIGH 500 ms = on/off toggle), FLIGHT GPIO25 = HIGH, DTR
 PC         COM6 (CH9102); ESP-IDF v6.1: . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 SIM/APN    Tele2 LT "PILDYK", APN "internet", LTE band 1, CGNAT IP
 Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqtt
-Server     mqtts://mqtt.rmx.lt:8884 (client certificate, client id := CN; 8883 is the password listener for the app and PC tools). Firmware files are the same *.bin names as /fw/probe/, served as MQTT chunks.
+Server     mqtts://mqtt.rmx.lt:8884 (client certificate, client id := CN; 8883 is the password listener for the app and PC tools). Firmware files (<version>.bin) come as MQTT chunks from the app.
 Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain)
 Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /probe/health; the gateway firmware does not.
 Firmware   main/ (repo root): MQTT login with the client certificate (name = CN) on mower/<name>/req|res and mower/<name>/fw/…

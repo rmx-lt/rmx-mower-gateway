@@ -78,7 +78,7 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
 
 ### Firmware updates (OTA)
 
-`main/ota.c` downloads `<version>.bin` as MQTT chunks (the same file names as `/fw/probe/`),
+`main/ota.c` downloads `<version>.bin` as MQTT chunks,
 one request in flight. A timeout retries that chunk (3 retries, same request id) and the next
 index resumes while the task is still running. A board reset drops that progress; the next
 `ota` command starts clean. Checks, in order: app header (project, the requested version, not
