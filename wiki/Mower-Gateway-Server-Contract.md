@@ -67,7 +67,7 @@ P-256 key connects; the device certificate alone is refused ("unknown ca"), so t
 
 ## MQTT broker rules (Mosquitto, `mosquitto.conf` + `acl`)
 
-- `allow_anonymous false`: every connection needs username + password.
+- `allow_anonymous false`: every connection needs a login (password on 8883, client certificate on 8884).
 - Listener 8883: TLS (`tls_version tlsv1.2` = minimum), **`use_username_as_clientid true`** —
   the broker replaces the client ID with the username. Topic schemes keyed on the client ID
   must use the username.
@@ -75,13 +75,11 @@ P-256 key connects; the device certificate alone is refused ("unknown ca"), so t
   - `pattern readwrite mower/%u/#` — **every login** may use only `mower/<its username>/#`.
   - `user app` → `mower/#` (backend).
   - `pattern read mower/events/#` and `pattern read mower/status/server` — every login may read the shared server topics.
-  - `user probe-app` → `mower/#` (probe server; plus legacy `probe/#` until the switch is done).
-  - `user probe-device` → legacy, to be removed: write `probe/req/probe-device`,
-    read `probe/res/probe-device`, `probe/events/#`, `probe/status/#`.
-- Logins that exist: `app`, `mower-01`, `probe-app`, `probe-device` (legacy). Passwords live only on the
+  - `user probe-app` → `mower/#` (rmx-server-app).
+- Password logins (8883): `app`, `probe-app`, `mower-test` (ACL tests). Passwords live only on the
   server (`services/mosquitto/data/credentials.txt`, root 0600). **Never print or commit them.**
-  The `mower-01` password is no longer used by the device (it logs in with its certificate); retiring that
-  server-side login is a server task.
+  Devices have no password: `mower-01` exists only as a certificate CN on 8884 (its password login
+  was deleted on 2026-11-13, https://github.com/rmx-lt/rmx-server-infra/issues/79).
 - Mosquitto accepts a SUBSCRIBE to a forbidden topic but never delivers to it (no error!).
   A PUBLISH to a forbidden topic is silently dropped (MQTT 3.1.1).
 - Bad login → CONNACK 5 "not authorized" (verified from the device).
@@ -149,9 +147,8 @@ HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
 ## Firmware over MQTT
 
 The device downloads a signed `*.bin` as binary chunks on the MQTT connection it already
-has. The file name is the same last segment Caddy serves
-(`https://api.rmx.lt/fw/probe/<version>.bin` → file `<version>.bin`). The device does not
-open that URL. The byte layout, request JSON, error codes and chunk size are the contract
+has. The file is `<version>.bin` in the server's firmware folder; there is no HTTPS download
+(Caddy's `/fw/` was removed on 2026-11-13). The byte layout, request JSON, error codes and chunk size are the contract
 in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway does with it:
 
 1. The `ota` command carries `version` and optional `file` (default `<version>.bin`) and
