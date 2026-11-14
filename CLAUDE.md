@@ -19,12 +19,12 @@ Work and open questions are GitHub issues in this repo, on the Blade of Grass pr
 
 Reusable board, chip and ESP-IDF knowledge also lives in the central hub `C:\Repos\esp-knowledge`
 (private repo `jRmx0/esp-knowledge`; read its `INDEX.md`). Its `boards/t-sim7600.md` has the header pinout and
-free GPIOs; put new board or chip facts there, and keep probe-specific knowledge in the wiki (`Mower-Gateway-*` pages).
+free GPIOs; put new board or chip facts there, and keep gateway-specific knowledge in the wiki (`Mower-Gateway-*` pages).
 
 ## Environment
 
 - Windows, PowerShell primary. ESP-IDF v6.1: `. C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1`, then `idf.py`.
-- Two build paths: `idf.py` (reference) and PlatformIO (`~/.platformio/penv/Scripts/pio.exe run -e probe`; `platformio.ini`, pinned platform 7.1.0 = ESP-IDF 6.1.0). PlatformIO needs `keys/ota_signing_key.pem` (`sign_ota.py` signs the image) and writes `sdkconfig.probe` (gitignored, holds credentials).
+- Two build paths: `idf.py` (reference) and PlatformIO (`~/.platformio/penv/Scripts/pio.exe run -e gateway`; `platformio.ini`, pinned platform 7.1.0 = ESP-IDF 6.1.0). PlatformIO needs `keys/ota_signing_key.pem` (`sign_ota.py` signs the image) and writes `sdkconfig.gateway` (gitignored, holds credentials).
 - Board on **COM6** (CH9102). Opening the port resets the ESP32 (not the modem).
 - No interactive `idf.py monitor` for agents: read the serial log with a pyserial script (see the wiki page `Mower-Gateway-Tools`).
 - Related repos: `C:\Repos\esp-knowledge`, `C:\Repos\LilyGo-Modem-Series`, `C:\Repos\esp-protocols`, `C:\esp\v6.1\esp-idf`,

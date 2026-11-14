@@ -10,8 +10,8 @@ Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4
 | 02 | [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600) | modem firmware, power sequence, registration, AT commands, modem-internal TLS/MQTT (verified) |
 | 03 | [Mower-Gateway-ESP-IDF-Environment](Mower-Gateway-ESP-IDF-Environment) | toolchain paths, build/flash commands, IDF v6 changes, sdkconfig for this board |
 | 04 | [Mower-Gateway-PPP](Mower-Gateway-PPP) | esp_modem + PPP: correct DTE config, startup sequence, CMUX, robustness |
-| 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, probe MQTT protocol, firmware chunks |
-| 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the probe firmware), firmware layout, decisions, risks |
+| 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, firmware chunks |
+| 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the gateway firmware), firmware layout, decisions, risks |
 | — | [Mower-Gateway-Sources](Mower-Gateway-Sources) | where every fact came from (local repos, PDFs, web) |
 | — | [Mower-Gateway-Tools](Mower-Gateway-Tools) | AT bridge firmware, AT script, PPP smoke test |
 
@@ -29,7 +29,7 @@ Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqt
 Server     mqtts://mqtt.rmx.lt:8884 (client certificate, client id := CN; 8883 is the password listener for the app and PC tools). Firmware files (<version>.bin) come as MQTT chunks from the app.
 Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain)
 Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /probe/health; the gateway firmware does not.
-Firmware   main/ (repo root): MQTT login with the client certificate (name = CN) on mower/<name>/req|res and mower/<name>/fw/…
+Firmware   main/ (repo root): MQTT login with the client certificate (name = CN): status, cmd/ack and mower/<name>/fw/… (no records protocol since issue 52)
 Logins     certificate only: board-made P-256 key + chain in NVS (tools/provision_cert.ps1 -Name <name>), name = CN, port 8884, no password anywhere on the board (live-verified 2026-11-11). See Mower-Gateway "Identity"
 Commands   PC → mower/<name>/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified
 OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. Verified 2026-11-10: 0.3.0 USB flash, unknown file `not_found`, reset at 10% then clean retry, 0.3.1 confirmed on ota_1 (97 s, 729088 bytes).

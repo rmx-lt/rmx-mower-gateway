@@ -1,31 +1,26 @@
-menu "rmx probe"
+menu "rmx gateway"
 
     comment "Identity: the client certificate in NVS (tools/provision_cert.ps1); its CN is the device name. No passwords."
 
-    config PROBE_APN
+    config GATEWAY_APN
         string "Cellular APN"
         default "internet"
         help
             APN of the SIM. "internet" for Tele2 LT / Pildyk.
 
-    config PROBE_MQTT_CERT_URI
+    config GATEWAY_MQTT_CERT_URI
         string "MQTT broker URI (client certificate login)"
         default "mqtts://mqtt.rmx.lt:8884"
         help
             No password is sent; the broker takes the identity from the CN
             of the client certificate and forces client id = username.
 
-    config PROBE_HEARTBEAT_S
-        int "Seconds between MQTT create requests after the self-test (0 = off)"
-        default 0
-        range 0 86400
-
-    config PROBE_OTA_CONFIRM_S
+    config GATEWAY_OTA_CONFIRM_S
         int "Seconds a new image has to reach MQTT before it rolls back"
         default 300
         range 60 3600
 
-    config PROBE_OTA_MIN_CSQ
+    config GATEWAY_OTA_MIN_CSQ
         int "Minimum signal (AT+CSQ, 0-31) to start an update"
         default 5
         range 0 31

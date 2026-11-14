@@ -7,9 +7,9 @@ Diagnostic firmware and scripts for the LilyGo T-SIM7600. All were run on the re
 | [`at_bridge/`](https://github.com/rmx-lt/rmx-mower-gateway/tree/development/tools/at_bridge) | ESP-IDF app: powers the modem with the board's pin sequence, then bridges USB console ⇄ modem UART (like LilyGo's ATdebug). |
 | [`at_session.py`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/at_session.py) | Host script: resets the ESP, waits for `at_bridge`, sends AT commands, prints replies. |
 | [`serial_log.py`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/serial_log.py) | Host script: resets the ESP and prints its log (`COM6 [seconds] [--until TEXT]`). |
-| [`mqtt_cmd.ps1`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/mqtt_cmd.ps1) | Host script: sends a remote command to the probe firmware (`mower/<device>/cmd`, `-Device`, default `mower-01`; login `app`) and prints the reply from `…/cmd/ack`. |
+| [`mqtt_cmd.ps1`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/mqtt_cmd.ps1) | Host script: sends a remote command to the gateway firmware (`mower/<device>/cmd`, `-Device`, default `mower-01`; login `app`) and prints the reply from `…/cmd/ack`. |
 | [`provision_cert.ps1`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/provision_cert.ps1) + [`cert_serial.py`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/cert_serial.py) | Host script (`-Name <device name>` is required: it is the CN of the first CSR, sent as `RMX-CSR <name>`; the board keeps no name). Resets the board, reads the CSR, runs `device-ca.ps1 sign` (blade-of-grass repo, wiki Device-CA; asks for the issuing passphrase; `-PassFile` is passed through for non-interactive signing; `-CaDir`, `-CaTool`) and sends the chain over the serial port; the firmware stores it under NVS `chain` and restarts. It does not erase the key or other keys: a firmware serial command writes one NVS key, whereas an NVS partition image would have to contain the key, which cannot be read back. `-Clear` removes the certificate again (the board then stops connecting). This is the only provisioning path: `provision_nvs.ps1` and the password login were removed (issue 43), verified 2026-11-11 by an OTA to 0.3.3 that kept key and chain. Verified 2026-11-10 with a throwaway CA: CSR (`openssl req -verify`: CN mower-01, prime256v1), chain stored, boot log `login: client certificate` (8884 not reachable yet, errno 113), `-Clear`, then the password login on 8883 passes the self-test. |
-| [`ppp_smoke/`](https://github.com/rmx-lt/rmx-mower-gateway/tree/development/tools/ppp_smoke) | ESP-IDF app: esp_modem PPP → HTTPS GET `api.rmx.lt/probe/health` → MQTTS to `mqtt.rmx.lt:8883` with a fake login (expects CONNACK 5). The reference for the probe firmware. |
+| [`ppp_smoke/`](https://github.com/rmx-lt/rmx-mower-gateway/tree/development/tools/ppp_smoke) | ESP-IDF app: esp_modem PPP → HTTPS GET `api.rmx.lt/probe/health` → MQTTS to `mqtt.rmx.lt:8883` with a fake login (expects CONNACK 5). The reference for the gateway firmware. Its `/probe/health` URL still matches the old server; rmx-server-app now uses `/app/health`, so change it when the VPS runs the renamed server. |
 
 ## Build and flash (PowerShell)
 
@@ -56,20 +56,20 @@ while time.time() - t < 60:
 
 ## PlatformIO build (alternative to idf.py)
 
-`platformio.ini` builds the probe firmware (`main/`) with PlatformIO next to `idf.py`; `idf.py` stays the reference build and
+`platformio.ini` builds the gateway firmware (`main/`) with PlatformIO next to `idf.py`; `idf.py` stays the reference build and
 `tools/ppp_smoke` and `tools/at_bridge` are idf.py only. Both builds read `sdkconfig.defaults` and `partitions.csv`.
 
 ```powershell
-~\.platformio\penv\Scripts\pio.exe run -e probe              # build (first build ~13 min, downloads ~1.5-2 GB)
-~\.platformio\penv\Scripts\pio.exe run -e probe -t upload    # flash on COM6
+~\.platformio\penv\Scripts\pio.exe run -e gateway            # build (first build ~13 min, downloads ~1.5-2 GB)
+~\.platformio\penv\Scripts\pio.exe run -e gateway -t upload  # flash on COM6
 ```
 
 Verified on hardware 2026-11-08:
 - Platform `espressif32 @ 7.1.0` (pinned) bundles ESP-IDF v6.1.0; the `pioarduino` fork is still on IDF 5.5. Managed components (esp_modem, mqtt, cjson) resolve from `main/idf_component.yml`; no `lib_deps`.
-- PlatformIO writes `sdkconfig.probe` (gitignored, like `.pio/`).
-- PlatformIO does **not** sign the image. `sign_ota.py` (post-build hook) signs `firmware.bin` with `keys/ota_signing_key.pem`; check with `espsecure.py verify_signature --version 2 --keyfile keys/ota_signing_key.pem .pio/build/probe/firmware.bin`.
-- A changed `version.txt` is only picked up after a CMake reconfigure: delete `.pio/build/probe/CMakeCache.txt`, then build.
+- PlatformIO writes `sdkconfig.gateway` (gitignored, like `.pio/`).
+- PlatformIO does **not** sign the image. `sign_ota.py` (post-build hook) signs `firmware.bin` with `keys/ota_signing_key.pem`; check with `espsecure.py verify_signature --version 2 --keyfile keys/ota_signing_key.pem .pio/build/gateway/firmware.bin`.
+- A changed `version.txt` is only picked up after a CMake reconfigure: delete `.pio/build/gateway/CMakeCache.txt`, then build.
 - Flashing with `pio ... -t upload` keeps NVS (credentials); the CH9102 auto-reset works with the default settings (no `monitor_rts`/`monitor_dtr` override needed); `serial_log.py` also works as before.
 - The PlatformIO-built image passed the PPP/MQTT self-test. An HTTPS OTA to a PlatformIO-built, signed 0.2.4 image succeeded before firmware download moved to MQTT (`ota_0` to `ota_1`, confirmed).
-- 2026-11-10: `pio run -e probe` signed `firmware.bin` (729088 bytes; RAM 20752/327680, flash 706493/4194304). USB flash of 0.3.0 on COM6 passed the self-test. `0.3.1.bin` (same tree, version string only) was copied to the server firmware dir and installed by `tools\mqtt_cmd.ps1 ota -Version 0.3.1 -Size 729088`. See [Mower-Gateway-Plan](Mower-Gateway-Plan).
+- 2026-11-10: `pio run -e probe` (now `-e gateway`) signed `firmware.bin` (729088 bytes; RAM 20752/327680, flash 706493/4194304). USB flash of 0.3.0 on COM6 passed the self-test. `0.3.1.bin` (same tree, version string only) was copied to the server firmware dir and installed by `tools\mqtt_cmd.ps1 ota -Version 0.3.1 -Size 729088`. See [Mower-Gateway-Plan](Mower-Gateway-Plan).
 - `tools/release.ps1` is idf.py only; for a PlatformIO image upload `firmware.bin` as `<version>.bin` by hand and send `tools\mqtt_cmd.ps1 ota`. Use PowerShell's `ssh`/`scp` (Git Bash's has no key).

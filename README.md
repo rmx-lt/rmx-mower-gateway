@@ -17,11 +17,11 @@ that connects over LTE to **rmx-server** and talks to **rmx-server-app** with
 ```powershell
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 idf.py set-target esp32     # first time only
-idf.py menuconfig           # "rmx probe": APN, broker URL (no logins, no passwords)
+idf.py menuconfig           # "rmx gateway": APN, broker URL (no logins, no passwords)
 idf.py build
 idf.py -p COM6 -b 921600 flash
 tools\provision_cert.ps1 -Name mower-02   # new board: CSR for that name, sign it, store the certificate
-python -I -u tools\serial_log.py COM6 120 --until SELF-TEST
+python -I -u tools\serial_log.py COM6 120 --until STARTUP
 ```
 
 The only identity is a client certificate; there are no passwords on the board. A new board:
@@ -37,7 +37,7 @@ included (a new key needs a new certificate).
 ## Layout
 
 ```
-main/        the firmware: board, cell (esp_modem PPP), mqtt_link, probe_proto, remote_cmd, gnss, ota
+main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, gnss, ota
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
              mqtt_cmd.ps1 (remote commands), release.ps1 (signed OTA release),
              provision_cert.ps1 + cert_serial.py (client certificate provisioning)

@@ -2,7 +2,7 @@
  * rmx-mower-gateway: LilyGo T-SIM7600 (ESP32 + SIM7600G-H) talking to
  * rmx-server-app over LTE.
  *
- * board -> cell (PPP) -> MQTT (connect, create + list over mower/<name>/req|res)
+ * board -> cell (PPP) -> MQTT (TLS, client certificate; retained status, last will)
  * -> stay online and run remote commands from mower/<name>/cmd (see remote_cmd.h).
  * Firmware updates arrive as MQTT chunks (main/ota.c).
  */
@@ -26,56 +26,21 @@
 #include "gnss.h"
 #include "mqtt_link.h"
 #include "ota.h"
-#include "probe_proto.h"
 #include "remote_cmd.h"
 #include "sdkconfig.h"
 
-static const char *TAG = "probe";
+static const char *TAG = "gateway";
 
-static void log_result(const char *what, const probe_result_t *r)
+static bool connect_mqtt(void)
 {
-    if (!r->ok) {
-        ESP_LOGE(TAG, "%s: error %s: %s", what, r->error_code, r->error_message);
-    } else if (r->kind[0] && r->id >= 0) {
-        ESP_LOGI(TAG, "%s: ok, %s id %lld (connection_type %s)", what, r->kind, r->id,
-                 r->connection_type[0] ? r->connection_type : "-");
-    } else {
-        ESP_LOGI(TAG, "%s: ok, %s count %d", what, r->kind, r->count);
-    }
-}
-
-static int self_test_mqtt(void)
-{
-    int failures = 0;
-    probe_result_t r;
-    char value[64];
-
     if (mqtt_link_start() != ESP_OK || !mqtt_link_wait_ready(90000)) {
-        ESP_LOGE(TAG, "TEST mqtt connect: FAIL");
-        return 1;
+        ESP_LOGE(TAG, "mqtt connect: FAIL");
+        return false;
     }
-    ESP_LOGI(TAG, "TEST mqtt connect: PASS");
+    ESP_LOGI(TAG, "mqtt connect: PASS");
     ota_confirm();   /* a new image that reaches the broker is good */
     ota_report_update();
-
-    snprintf(value, sizeof(value), "mqtt from T-SIM7600, uptime %lld s, rssi %d",
-             esp_timer_get_time() / 1000000, cell_last_rssi());
-    if (mqtt_link_request(PROBE_OP_CREATE, 0, value, &r, 30000) == ESP_OK && r.ok) {
-        log_result("mqtt create", &r);
-        ESP_LOGI(TAG, "TEST mqtt create: PASS");
-    } else {
-        ESP_LOGE(TAG, "TEST mqtt create: FAIL");
-        failures++;
-    }
-
-    if (mqtt_link_request(PROBE_OP_LIST, 0, NULL, &r, 60000) == ESP_OK && r.ok) {
-        log_result("mqtt list", &r);
-        ESP_LOGI(TAG, "TEST mqtt list: PASS");
-    } else {
-        ESP_LOGE(TAG, "TEST mqtt list: FAIL");
-        failures++;
-    }
-    return failures;
+    return true;
 }
 
 void app_main(void)
@@ -123,31 +88,19 @@ void app_main(void)
     gnss_start();   /* the first fix takes a while: start searching early */
 
     ESP_ERROR_CHECK(remote_cmd_init());
-    int failures = self_test_mqtt();
-    ESP_LOGI(TAG, "SELF-TEST %s (%d failure%s), free heap %u, min %u, internal %u",
-             failures ? "FAILED" : "PASSED", failures, failures == 1 ? "" : "s",
+    bool online = connect_mqtt();
+    ESP_LOGI(TAG, "STARTUP %s, free heap %u, min %u, internal %u", online ? "OK" : "FAILED",
              (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size(),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
     /* Stay online: esp-mqtt reconnects by itself, cell redials on PPP loss. */
-    int64_t last_beat = esp_timer_get_time();
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(60000));
         if (mqtt_link_wait_ready(0)) {
-            ota_confirm();   /* MQTT came up after the self-test */
+            ota_confirm();   /* MQTT came up after the first try */
             ota_report_update();
         }
         ESP_LOGI(TAG, "alive: ppp %s, rssi %d, free heap %u", cell_is_up() ? "up" : "down",
                  cell_last_rssi(), (unsigned)esp_get_free_heap_size());
-        if (CONFIG_PROBE_HEARTBEAT_S > 0 &&
-                esp_timer_get_time() - last_beat >= (int64_t)CONFIG_PROBE_HEARTBEAT_S * 1000000) {
-            last_beat = esp_timer_get_time();
-            probe_result_t r;
-            char value[64];
-            snprintf(value, sizeof(value), "heartbeat, uptime %lld s", last_beat / 1000000);
-            if (mqtt_link_request(PROBE_OP_CREATE, 0, value, &r, 30000) == ESP_OK) {
-                log_result("heartbeat", &r);
-            }
-        }
     }
 }
