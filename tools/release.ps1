@@ -9,7 +9,7 @@
 param(
     [switch]$Send,
     [string]$Device = 'mower-01',
-    [string]$RemoteDir = '/opt/rmx-vps/services/caddy/firmware/probe'
+    [string]$RemoteDir = '/opt/rmx-vps/services/app/firmware'
 )
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $PSScriptRoot '..' | Resolve-Path

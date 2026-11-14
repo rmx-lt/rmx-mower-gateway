@@ -28,7 +28,7 @@ SIM/APN    Tele2 LT "PILDYK", APN "internet", LTE band 1, CGNAT IP
 Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqtt
 Server     mqtts://mqtt.rmx.lt:8884 (client certificate, client id := CN; 8883 is the password listener for the app and PC tools). Firmware files (<version>.bin) come as MQTT chunks from the app.
 Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain)
-Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /probe/health; the gateway firmware does not.
+Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET /app/health; the gateway firmware does not.
 Firmware   main/ (repo root): MQTT login with the client certificate (name = CN): status, cmd/ack and mower/<name>/fw/… (no records protocol since issue 52)
 Logins     certificate only: board-made P-256 key + chain in NVS (tools/provision_cert.ps1 -Name <name>), name = CN, port 8884, no password anywhere on the board (live-verified 2026-11-11). See Mower-Gateway "Identity"
 Commands   PC → mower/<name>/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified

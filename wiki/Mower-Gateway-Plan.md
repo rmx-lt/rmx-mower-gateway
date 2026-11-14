@@ -31,7 +31,7 @@ has no HTTPS client.
 - [x] MQTT `create` on `probe/req/probe-device` → answer on `probe/res/probe-device` in ~240 ms
       (`connection_type: mqtt`), plus the `probe/events/records` event; `list` in ~370 ms
 - [x] MQTT create/list on `mower/<name>/req|res`. The gateway firmware has no HTTPS client
-      (removed with firmware-over-MQTT). `tools/ppp_smoke` still checks `GET /probe/health`.
+      (removed with firmware-over-MQTT). `tools/ppp_smoke` still checks `GET /app/health` (`/probe/health` until 2026-11-14).
 - [x] ESP reset while the modem was in PPP → next boot connects normally (PPP in ~150 ms)
 - [x] 3 min online afterwards: PPP and MQTT stayed up (keepalive 60 s), heap stable
       (4.39 MB free, 284 KB internal)
