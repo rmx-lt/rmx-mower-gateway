@@ -1,4 +1,4 @@
-# Mower-Gateway-Plan: Plan for the probe firmware, risks, open questions
+# Mower-Gateway-Plan: Plan for the gateway firmware, risks, open questions
 
 ## Goal
 
@@ -15,12 +15,16 @@ has no HTTPS client.
 - [x] PPP with esp_modem 2.1.0 on ESP-IDF v6.1, IP in ~160 ms after dial
 - [x] HTTPS GET `/probe/health` → 200, mbedTLS + cert bundle verification
 - [x] Client certificate (issue 43): key generation, CSR, chain write/clear and password fallback verified on the board 2026-11-10; image +12 KB flash (741376 bytes signed), +0.5 KB static RAM. Live login on 8884 with the real CA (serial 01, CN mower-01), self-test and an OTA to 0.3.2 passed 2026-11-11.
-- [x] Password login removed (issue 43, 2026-11-11): no `mqtt_pw`, no NVS `device`, no 8883 URI, `provision_nvs.ps1` deleted. 0.3.3 arrived by OTA from 0.3.2 with key and chain kept, `login: client certificate`, self-test PASSED. PlatformIO `probe` build: flash 718821 -> 718073 bytes (-748), RAM 21304 -> 21144 (-160); signed image still 741376 bytes.
+- [x] Password login removed (issue 43, 2026-11-11): no `mqtt_pw`, no NVS `device`, no 8883 URI, `provision_nvs.ps1` deleted. 0.3.3 arrived by OTA from 0.3.2 with key and chain kept, `login: client certificate`, self-test PASSED. PlatformIO `probe` (now `gateway`) build: flash 718821 -> 718073 bytes (-748), RAM 21304 -> 21144 (-160); signed image still 741376 bytes.
 - [x] MQTTS TLS handshake to 8883 + MQTT CONNECT reaches Mosquitto (fake login → CONNACK 5)
 - [x] Recovery after an ESP reset while the modem is in PPP
 - [x] Fallback: modem-internal TLS (AT+CCH*) with CA verification to both hosts
 
-### The probe firmware itself (repo root, `main/`) — verified 2026-10-19, 2 runs
+### The firmware itself (repo root, `main/`) — verified 2026-10-19, 2 runs
+
+> Records removed (issue 52, 2026-11): the `create`/`list` items below are history. The firmware no longer has a
+> records protocol, `main/probe_proto.*`, the `mower/<name>/req|res` topics or the `mower/events/records`
+> subscription; it still does status/last will, remote commands and firmware over MQTT.
 
 - [x] MQTT login `probe-device` over TLS (CONNACK in ~3.6 s incl. handshake), SUBACK on
       `probe/res/probe-device`, retained `probe/status/server` = `online` received
@@ -49,10 +53,9 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
 {"id":"pc-1a2b","cmd":"create","ok":false,"error":"expired","message":"…","ms":0,"time":…}
 ```
 
-- Commands: `ping`, `status` (uptime, PPP, rssi, heap, clock), `create`/`list`/`delete` (forwarded
-  to the probe server over MQTT), `ota`, `restart` (acks, then leaves PPP and restarts).
-- Errors: `bad_request`, `unknown_cmd`, `expired`, `no_clock`, `timeout`, `failed`, or the probe
-  server's own code. Duplicate ids (QoS 1 redelivery; last 8 kept) are ignored without a reply.
+- Commands: `ping`, `status` (uptime, PPP, rssi, heap, clock), `gps`, `ota`, `restart` (acks, then leaves PPP and restarts).
+  `create`/`list`/`delete` (forwarded to the probe server) were removed with the records (issue 52).
+- Errors: `bad_request`, `unknown_cmd`, `expired`, `no_clock`, `failed`. Duplicate ids (QoS 1 redelivery; last 8 kept) are ignored without a reply.
 - `expires_at` (unix s, optional): refused when past, or when the clock isn't set. The clock comes
   from SNTP (`pool.ntp.org`) over PPP right after boot (worked first try, < 4 s).
 - Measured PC → device → PC round trip (incl. a fresh TLS connect of `mosquitto_rr`): ~0.5–1 s;
@@ -87,7 +90,7 @@ the running one), size, whole-image SHA-256 against the chunk header, then `esp_
 `esp_ota_set_boot_partition`. See [Mower-Gateway → Firmware updates](Mower-Gateway#firmware-updates-ota).
 
 - Rollback: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`. A new image confirms itself on the first
-  MQTT CONNACK; without it within `CONFIG_PROBE_OTA_CONFIRM_S` (300 s) it rolls back.
+  MQTT CONNACK; without it within `CONFIG_GATEWAY_OTA_CONFIRM_S` (300 s) it rolls back.
 - Signed apps without Secure Boot (decided by the user 2026-10-22: no Secure Boot, no eFuses):
   RSA-3072, key in gitignored `keys/ota_signing_key.pem`. Needs `CONFIG_ESP32_REV_MIN_3`
   (the board is v3.1). On 2026-11-10 `espsecure verify_signature --version 2` accepted the
@@ -123,12 +126,11 @@ OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15))
 main/
   board.c/.h        pins, modem power on/off, STATUS
   cell.c/.h         esp_modem DTE/DCE, registration wait, PPP up/down, reconnect loop, events
-  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8884 (client certificate), LWT, subscribe, request/response, fw/req
+  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8884 (client certificate), LWT, subscribe, fw/req
   gnss.c/.h         SIM7600 GNSS over AT (via cell_with_command_mode): on at boot, read on demand
   remote_cmd.c/.h   commands from mower/<user>/cmd, acks on …/cmd/ack
   ota.c/.h          MQTT chunk download, image checks, first-boot confirm / rollback
-  probe_proto.c/.h  JSON envelopes (espressif/cjson), request_id generation
-  app_main.c        sequence: board → cell → mqtt test → loop
+  app_main.c        sequence: board → cell → mqtt → loop
 idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
 Kconfig.projbuild   APN, broker URL (no device name, no passwords)
 creds.c/.h          device name = certificate CN
@@ -144,8 +146,7 @@ MQTT client settings to start with:
 - `credentials.username` = certificate CN, `authentication.certificate/key` from NVS, no password; client id is forced to the username by the broker
 - `session.keepalive = 60`, `session.last_will` → `mower/<name>/status` (`mower-01` owns `mower/mower-01/#`)
 - `buffer.size = 8192` so one firmware chunk fits; `buffer.out_size = 2048`
-- `buffer.size` ≥ 16–64 KB if the device sends `list`
-- QoS 1 for requests; match responses by `request_id`
+- QoS 1 for status, commands and firmware requests
 
 ## Decisions (answered by the user 2026-10-19)
 
@@ -164,7 +165,7 @@ MQTT client settings to start with:
 
 7. **Real mower topics** ([#21](https://github.com/rmx-lt/rmx-mower-gateway/issues/21), decided 2026-11-13): yes. The firmware
    uses only `mower/<name>/…` (`main/mqtt_link.c`), where `<name>` is the certificate CN (e.g. `mower-01`), and the
-   shared `mower/events/records` and `mower/status/server`. The `probe/…` topics and the `probe-device` login in
+   shared `mower/status/server` (the records topics were removed in issue 52). The `probe/…` topics and the `probe-device` login in
    the 2026-10-19 entries above are history; the protocol itself is defined in
    [rmx-lt/blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
 

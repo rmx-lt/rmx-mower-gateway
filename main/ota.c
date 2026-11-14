@@ -17,10 +17,25 @@
 #include "psa/crypto.h"
 #include "cell.h"
 #include "mqtt_link.h"
-#include "probe_proto.h"
+#include "esp_random.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "ota";
+
+#define REQUEST_ID_LEN 32
+/* Project name of images built before the rename; one of them may update to this project. */
+#define LEGACY_PROJECT_NAME "rmx_mower_modem_probe"
+
+/* A unique request id for one firmware request ("dev-<boot>-<n>"). */
+static void new_request_id(char buf[REQUEST_ID_LEN + 1])
+{
+    static uint32_t boot_tag;
+    static uint32_t counter;
+    if (!boot_tag) {
+        boot_tag = esp_random() | 1;
+    }
+    snprintf(buf, REQUEST_ID_LEN + 1, "dev-%08lx-%lu", (unsigned long)boot_tag, (unsigned long)++counter);
+}
 
 /* wiki Mower-Gateway-Server-Contract, "Firmware over MQTT": the frame is the
  * contract in rmx-server-app (Server-App, "Firmware over MQTT"). One request
@@ -280,8 +295,8 @@ static bool link_up(int attempt)
 
 static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len, int64_t t0)
 {
-    char rid[PROBE_REQUEST_ID_LEN + 1];
-    probe_proto_new_request_id(rid);
+    char rid[REQUEST_ID_LEN + 1];
+    new_request_id(rid);
     uint8_t expect[8];
     if (!sha256_id(rid, expect)) {
         fail("failed", "could not hash the firmware request id", t0);
@@ -335,7 +350,9 @@ static bool check_desc(const esp_partition_t *part, int64_t t0)
         return false;
     }
     ESP_LOGI(TAG, "image: %s %s (IDF %s)", desc.project_name, desc.version, desc.idf_ver);
-    if (strncmp(desc.project_name, running->project_name, sizeof(desc.project_name)) != 0) {
+    bool renamed = strncmp(running->project_name, LEGACY_PROJECT_NAME, sizeof(desc.project_name)) == 0 &&
+                   strncmp(desc.project_name, "rmx_mower_gateway", sizeof(desc.project_name)) == 0;
+    if (!renamed && strncmp(desc.project_name, running->project_name, sizeof(desc.project_name)) != 0) {
         fail("bad_image", "the image is for another project", t0);
         return false;
     }
@@ -572,9 +589,9 @@ bool ota_start(const char *cmd_id, const char *file, const char *version, int si
         return false;
     }
     int rssi = cell_last_rssi();
-    if (rssi != 99 && rssi < CONFIG_PROBE_OTA_MIN_CSQ) {
+    if (rssi != 99 && rssi < CONFIG_GATEWAY_OTA_MIN_CSQ) {
         *error = "low_signal";
-        *message = "signal too weak for an update (CSQ below CONFIG_PROBE_OTA_MIN_CSQ)";
+        *message = "signal too weak for an update (CSQ below CONFIG_GATEWAY_OTA_MIN_CSQ)";
         return false;
     }
     if (!s_rxq) {
@@ -614,7 +631,7 @@ bool ota_busy(void)
 static void confirm_timeout(void *arg)
 {
     ESP_LOGE(TAG, "new image not confirmed within %d s (no MQTT), rolling back",
-             CONFIG_PROBE_OTA_CONFIRM_S);
+             CONFIG_GATEWAY_OTA_CONFIRM_S);
     esp_ota_mark_app_invalid_rollback_and_reboot();
 }
 
@@ -638,9 +655,9 @@ void ota_boot_init(void)
         s_pending_verify = true;
         const esp_timer_create_args_t args = { .callback = confirm_timeout, .name = "ota_confirm" };
         if (esp_timer_create(&args, &s_confirm_timer) == ESP_OK) {
-            esp_timer_start_once(s_confirm_timer, (uint64_t)CONFIG_PROBE_OTA_CONFIRM_S * 1000000);
+            esp_timer_start_once(s_confirm_timer, (uint64_t)CONFIG_GATEWAY_OTA_CONFIRM_S * 1000000);
         }
-        ESP_LOGW(TAG, "new image: confirm within %d s or roll back", CONFIG_PROBE_OTA_CONFIRM_S);
+        ESP_LOGW(TAG, "new image: confirm within %d s or roll back", CONFIG_GATEWAY_OTA_CONFIRM_S);
     }
 }
 
@@ -711,13 +728,4 @@ void ota_report_update(void)
     }
     free(json);
     s_report_pending = false;
-
-    char value[128];
-    snprintf(value, sizeof(value), "firmware updated to %s (from %s, %s)", version, previous, partition);
-    probe_result_t r;
-    if (mqtt_link_request(PROBE_OP_CREATE, 0, value, &r, 30000) == ESP_OK && r.ok) {
-        ESP_LOGI(TAG, "server told: %s (record %lld)", value, r.id);
-    } else {
-        ESP_LOGW(TAG, "update record not created (the retained firmware message went out)");
-    }
 }

@@ -68,7 +68,7 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 ```
 
 Notes:
-- The probe firmware uses [`partitions.csv`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/partitions.csv): NVS 24 KB, otadata, two
+- The gateway firmware uses [`partitions.csv`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/partitions.csv): NVS 24 KB, otadata, two
   **4 MB OTA slots**, ~7.9 MB `storage`. Its image is 833 KB (2026-10-19).
 - The default partition table has a **1 MB** factory app. The smoke test
   (esp_modem + PPP + esp_http_client + esp-mqtt + full cert bundle) is already
@@ -80,6 +80,6 @@ Notes:
   Internal RAM is what matters for TLS buffers; `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`
   / `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC` can move mbedTLS buffers to PSRAM if internal RAM runs low.
 - `CONFIG_MBEDTLS_HAVE_TIME_DATE` is off by default → mbedTLS does not check certificate
-  validity dates. Good enough for the probe; production should sync time (SNTP over PPP,
+  validity dates. Good enough for the gateway firmware as it is; production should sync time (SNTP over PPP,
   or the modem clock `AT+CCLK?`) and enable it.
 - UART0 (GPIO1/3) is the console. The modem uses UART1 (any free UART works; esp_modem default is UART_NUM_1).

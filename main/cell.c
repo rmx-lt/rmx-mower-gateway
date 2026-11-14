@@ -157,7 +157,7 @@ esp_err_t cell_start(int timeout_ms)
     dte.uart_config.rx_buffer_size = 8192;
     dte.uart_config.tx_buffer_size = 2048;
     dte.dte_buffer_size = 4096;
-    esp_modem_dce_config_t dce_cfg = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_PROBE_APN);
+    esp_modem_dce_config_t dce_cfg = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_GATEWAY_APN);
     esp_netif_config_t ppp_cfg = ESP_NETIF_DEFAULT_PPP();
     esp_netif_t *ppp = esp_netif_new(&ppp_cfg);
     s_dce = esp_modem_new_dev(ESP_MODEM_DCE_SIM7600, &dte, &dce_cfg, ppp);

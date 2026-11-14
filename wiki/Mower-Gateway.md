@@ -10,9 +10,9 @@ to **rmx-server** and talks to **rmx-server-app** with **MQTT over TLS** only.
 
 ## Status
 
-Probe firmware working on the hardware: over LTE (PPP) it logs in to the broker with its
-client certificate (name = certificate CN, e.g. `mower-01`), sends `create`/`list` on `mower/<name>/req` and gets
-the answers on `mower/<name>/res`. It takes remote commands from the PC on
+Firmware working on the hardware: over LTE (PPP) it logs in to the broker with its
+client certificate (name = certificate CN, e.g. `mower-01`), publishes the retained status
+`mower/<name>/status` (last will `offline`) and takes remote commands from the PC on
 `mower/<name>/cmd` and replies on `…/cmd/ack`. A new image is requested as MQTT chunks on
 `mower/<name>/fw/req` and written from `mower/<name>/fw/chunk`. The firmware has no HTTPS
 client. Verified 2026-11-10: a USB flash of 0.3.0 passed the MQTT self-test, an unknown
@@ -21,6 +21,11 @@ file returned `not_found` and left 0.3.0 running, and `ota` of `0.3.1.bin` (7290
 confirmed on the first MQTT connect. A reset at 10% was a clean retry from the first chunk.
 Verified 2026-11-11: with the certificate as the only login (no password code left), the board
 booted 0.3.3 after an OTA from 0.3.2, logged `login: client certificate` and passed the MQTT self-test.
+The records protocol (`create`/`list`/`delete` on `mower/<name>/req|res`) and the "probe" naming were
+removed in [issue 52](https://github.com/rmx-lt/rmx-mower-gateway/issues/52) (the server dropped them).
+The old "self-test" log lines are now `mqtt connect: PASS` and `STARTUP OK`; Kconfig options are
+`CONFIG_GATEWAY_*` (menu "rmx gateway"), the PlatformIO env is `gateway`, the project `rmx_mower_gateway`.
+NVS keys (`creds/key`, `creds/chain`) did not change. The older "self-test" notes below are history.
 Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
 
 ## Build, configure, flash (PowerShell)
@@ -28,11 +33,11 @@ Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
 ```powershell
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 idf.py set-target esp32     # first time only
-idf.py menuconfig           # "rmx probe": APN, broker URL (no logins, no passwords)
+idf.py menuconfig           # "rmx gateway": APN, broker URL (no logins, no passwords)
 idf.py build
 idf.py -p COM6 -b 921600 flash
 tools\provision_cert.ps1 -Name mower-02   # new board: CSR with that name, sign it, store the certificate (wiki Device-CA)
-python -I -u tools\serial_log.py COM6 120 --until SELF-TEST
+python -I -u tools\serial_log.py COM6 120 --until STARTUP
 ```
 
 ### Identity: client certificate only
@@ -55,7 +60,7 @@ afterwards and 0.3.3 (without it) arrived by OTA with the key and chain untouche
   `tools\provision_cert.ps1 -Name <name>`, which sends `RMX-CSR <name>`; the board does not store it.
 - Boot without a valid `chain`: the board logs `no client certificate: not connecting` every 30 s,
   starts no modem and no MQTT, and waits for provisioning on the serial port.
-- Boot with `chain`: MQTT goes to `CONFIG_PROBE_MQTT_CERT_URI` (default `mqtts://mqtt.rmx.lt:8884`)
+- Boot with `chain`: MQTT goes to `CONFIG_GATEWAY_MQTT_CERT_URI` (default `mqtts://mqtt.rmx.lt:8884`)
   with `credentials.authentication.certificate` = chain and `.key` = key, no password; username and
   client id are the CN. The server is checked against the ISRG bundle.
 - Serial commands (UART0, 115200, one line each): `RMX-CSR <name>` prints a CSR with CN `<name>`
@@ -67,12 +72,12 @@ afterwards and 0.3.3 (without it) arrived by OTA with the key and chain untouche
 
 Provisioning a new board end to end (needs the device CA, wiki Device-CA, and its passphrase):
 
-1. `idf.py -p COM6 flash` (or the PlatformIO `probe` env). The board makes its key and waits.
+1. `idf.py -p COM6 flash` (or the PlatformIO `gateway` env). The board makes its key and waits.
 2. `tools\provision_cert.ps1 -Name mower-02`: resets the board, asks for the CSR, runs
    `device-ca.ps1 sign` (asks for the issuing passphrase), sends the chain over serial.
 3. The board answers `RMX-CERT-OK mower-02`, restarts, logs `login: client certificate` and
    connects. The broker side (ACL `mower/%u/#`, CRL) needs no per-device password.
-4. `python -I -u tools\serial_log.py COM6 120 --until SELF-TEST` shows the self-test.
+4. `python -I -u tools\serial_log.py COM6 120 --until STARTUP` shows the startup.
 
 Verified 2026-11-11 on the existing board: `RMX-CSR mower-01` gives a CSR with CN `mower-01` (`openssl
 req -verify` OK) and an invalid name is refused. Not verified on hardware: the blank-board path (no
@@ -91,27 +96,29 @@ to the default bundle* with path `certs/rmx-ca-bundle.pem` (or copy the four TLS
 ```powershell
 tools\mqtt_cmd.ps1 ping
 tools\mqtt_cmd.ps1 status
-tools\mqtt_cmd.ps1 create -Value "hello from the PC"
-tools\mqtt_cmd.ps1 create -Gps          # value = GPS location, or "gps unavailable: <why>"
-tools\mqtt_cmd.ps1 delete -RecordId 41
+tools\mqtt_cmd.ps1 gps                  # GPS location, or "gps unavailable: <why>"
 tools\mqtt_cmd.ps1 restart
 tools\mqtt_cmd.ps1 ota -Version 0.2.5 -Size 851234   # file = 0.2.5.bin; see "Firmware updates"
 ```
 
-Commands: `ping status create list delete ota restart`. Each carries
-`expires_at` (now + `-TtlS`, default 60 s). `-Gps` (create) sends the device's
-GNSS location instead of a value; without a fix it sends `gps unavailable: …` and says why.
+Commands: `ping status gps ota restart`. Each carries
+`expires_at` (now + `-TtlS`, default 60 s). `gps` returns the device's GNSS location
+(`result.location`, `result.gps` status, `result.gps_fix`); without a fix `location` is `gps unavailable: …` and the status says why.
+`create`, `list` and `delete` (records) were removed: they now return `unknown_cmd`.
 Needs the Mosquitto clients for Windows and `ssh rmx-vps`.
 
 ## Firmware updates (OTA)
 
 The device downloads a new image as MQTT chunks into the spare app slot (`partitions.csv`:
 two 4 MB slots), checks it, boots it, and keeps it only if it reaches the MQTT broker within
-`CONFIG_PROBE_OTA_CONFIRM_S` (300 s). Otherwise the previous image boots again. Code:
+`CONFIG_GATEWAY_OTA_CONFIRM_S` (300 s). Otherwise the previous image boots again. Code:
 [`main/ota.c`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/main/ota.c).
 The byte layout is wiki [Server-App](Server-App#firmware-over-mqtt). The device side is
 [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract).
 
+- **Project name.** The project is now `rmx_mower_gateway` (was `rmx_mower_modem_probe`). The project-name
+  check in `ota.c` accepts that one rename: a board still running the old name may update to an image named
+  `rmx_mower_gateway`; after that the names must match as before.
 - **Signed images.** OTA images must be signed with our RSA-3072 key (Secure Boot V2 scheme,
   `CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT` and `CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`).
   `esp_ota_end` checks that signature before `esp_ota_set_boot_partition`. The running
@@ -123,8 +130,7 @@ The byte layout is wiki [Server-App](Server-App#firmware-over-mqtt). The device 
   firmware folder (wiki [Server-Infra](Server-Infra#firmware-images-ota) §10). An optional `file` (or the last
   segment of a legacy `url`) names the file instead. The device does not open HTTPS.
 - **Report.** Once a new image has confirmed itself, it tells the server once: a retained
-  `{"version","previous","partition","time"}` on `mower/<name>/firmware`, and a probe
-  record `firmware updated to <version> (from <previous>, <slot>)`.
+  `{"version","previous","partition","time"}` on `mower/<name>/firmware`.
 - **Retries.** One chunk request is in flight. A timeout retries that chunk (same request id,
   up to 3 more times). Bytes already written stay, so a reconnect resumes at the next chunk.
   A reset of the board drops the in-memory progress; the next `ota` command starts again.
@@ -163,7 +169,7 @@ that frame arrives in one event; a fragmented `MQTT_EVENT_DATA` is still reassem
 ## Layout
 
 ```
-main/        the probe firmware: board, cell (esp_modem PPP), mqtt_link, probe_proto, remote_cmd, gnss, ota
+main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, gnss, ota
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
              mqtt_cmd.ps1 (remote commands), release.ps1 (signed OTA release)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release

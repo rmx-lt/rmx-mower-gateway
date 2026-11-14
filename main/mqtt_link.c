@@ -17,19 +17,14 @@
 static const char *TAG = "mqtt";
 
 #define CONNECTED    BIT0
-#define RES_SUBBED   BIT1
-#define GOT_RES      BIT2
 #define FW_CHUNK_SUB BIT3
 #define FW_RES_SUB   BIT4
 
-/* list responses can hold up to 500 records: reassemble up to this size */
+/* reassemble fragmented messages up to this size */
 #define MAX_MESSAGE (128 * 1024)
 
 static esp_mqtt_client_handle_t s_client;
 static EventGroupHandle_t s_ev;
-static SemaphoreHandle_t s_req_lock;
-static char s_req_topic[96];
-static char s_res_topic[96];
 static char s_cmd_topic[96];
 static char s_ack_topic[96];
 static char s_status_topic[96];   /* retained online / offline, also the last will */
@@ -38,14 +33,9 @@ static char s_fw_chunk_topic[96];
 static char s_fw_res_topic[96];
 static mqtt_link_cmd_cb_t s_cmd_cb;
 static mqtt_link_fw_cb_t s_fw_cb;
-static int s_res_sub_msg_id = -1;
 static int s_fw_chunk_sub_id = -1;
 static int s_fw_res_sub_id = -1;
 static int64_t s_connect_started_us;
-
-/* the request we wait for, and its parsed answer */
-static char s_pending_id[PROBE_REQUEST_ID_LEN + 1];
-static probe_result_t s_pending_result;
 
 /* reassembly of fragmented messages */
 static char *s_rx;
@@ -70,18 +60,6 @@ static void handle_message(const char *topic, const char *data, size_t len)
     }
     if (s_cmd_cb && strcmp(topic, s_cmd_topic) == 0) {
         s_cmd_cb(data, len);
-    } else if (strcmp(topic, s_res_topic) == 0) {
-        probe_result_t r;
-        if (!probe_proto_parse_response(data, len, &r)) {
-            ESP_LOGW(TAG, "unparsable response (%u bytes)", (unsigned)len);
-            return;
-        }
-        if (s_pending_id[0] && strcmp(r.request_id, s_pending_id) == 0) {
-            s_pending_result = r;
-            xEventGroupSetBits(s_ev, GOT_RES);
-        } else {
-            ESP_LOGW(TAG, "response for unknown request_id %s", r.request_id);
-        }
     } else if (strncmp(topic, "mower/events/", 13) == 0) {
         ESP_LOGI(TAG, "event on %s: %.*s", topic, len > 200 ? 200 : (int)len, data);
     } else {
@@ -133,8 +111,6 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "connected as %s in %lld ms (session present %d)", creds_device_name(),
                  (esp_timer_get_time() - s_connect_started_us) / 1000, e->session_present);
         xEventGroupSetBits(s_ev, CONNECTED);
-        s_res_sub_msg_id = esp_mqtt_client_subscribe_single(s_client, s_res_topic, 1);
-        esp_mqtt_client_subscribe_single(s_client, "mower/events/records", 0);
         esp_mqtt_client_subscribe_single(s_client, "mower/status/server", 1);
         if (s_cmd_cb) {
             esp_mqtt_client_subscribe_single(s_client, s_cmd_topic, 1);
@@ -145,13 +121,10 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "disconnected");
-        xEventGroupClearBits(s_ev, CONNECTED | RES_SUBBED | FW_CHUNK_SUB | FW_RES_SUB);
+        xEventGroupClearBits(s_ev, CONNECTED | FW_CHUNK_SUB | FW_RES_SUB);
         break;
     case MQTT_EVENT_SUBSCRIBED:
-        if (e->msg_id == s_res_sub_msg_id) {
-            ESP_LOGI(TAG, "subscribed %s", s_res_topic);
-            xEventGroupSetBits(s_ev, RES_SUBBED);
-        } else if (e->msg_id == s_fw_chunk_sub_id) {
+        if (e->msg_id == s_fw_chunk_sub_id) {
             xEventGroupSetBits(s_ev, FW_CHUNK_SUB);
         } else if (e->msg_id == s_fw_res_sub_id) {
             xEventGroupSetBits(s_ev, FW_RES_SUB);
@@ -195,10 +168,7 @@ esp_err_t mqtt_link_start(void)
         return ESP_ERR_INVALID_STATE;
     }
     s_ev = xEventGroupCreate();
-    s_req_lock = xSemaphoreCreateMutex();
     const char *name = creds_device_name();
-    snprintf(s_req_topic, sizeof(s_req_topic), "mower/%s/req", name);
-    snprintf(s_res_topic, sizeof(s_res_topic), "mower/%s/res", name);
     snprintf(s_cmd_topic, sizeof(s_cmd_topic), "mower/%s/cmd", name);
     snprintf(s_ack_topic, sizeof(s_ack_topic), "mower/%s/cmd/ack", name);
     snprintf(s_status_topic, sizeof(s_status_topic), "mower/%s/status", name);
@@ -207,7 +177,7 @@ esp_err_t mqtt_link_start(void)
     snprintf(s_fw_res_topic, sizeof(s_fw_res_topic), "mower/%s/fw/res", name);
 
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri = CONFIG_PROBE_MQTT_CERT_URI,
+        .broker.address.uri = CONFIG_GATEWAY_MQTT_CERT_URI,
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
         .credentials.username = name,
         .credentials.client_id = name,   /* the broker forces it anyway */
@@ -245,44 +215,8 @@ bool mqtt_link_wait_ready(int timeout_ms)
     if (!s_ev) {
         return false;   /* never started */
     }
-    EventBits_t want = CONNECTED | RES_SUBBED | FW_CHUNK_SUB | FW_RES_SUB;
+    EventBits_t want = CONNECTED | FW_CHUNK_SUB | FW_RES_SUB;
     return (xEventGroupWaitBits(s_ev, want, pdFALSE, pdTRUE, pdMS_TO_TICKS(timeout_ms)) & want) == want;
-}
-
-esp_err_t mqtt_link_request(probe_op_t op, int64_t id, const char *value,
-                            probe_result_t *out, int timeout_ms)
-{
-    if (!s_client) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    xSemaphoreTake(s_req_lock, portMAX_DELAY);
-    char rid[PROBE_REQUEST_ID_LEN + 1];
-    probe_proto_new_request_id(rid);
-    char *json = probe_proto_build_request(rid, op, id, value);
-    esp_err_t err = ESP_OK;
-
-    snprintf(s_pending_id, sizeof(s_pending_id), "%s", rid);
-    xEventGroupClearBits(s_ev, GOT_RES);
-    int64_t t0 = esp_timer_get_time();
-    int msg_id = esp_mqtt_client_publish(s_client, s_req_topic, json, 0, 1, 0);
-    if (msg_id < 0) {
-        ESP_LOGE(TAG, "publish on %s failed", s_req_topic);
-        err = ESP_FAIL;
-    } else {
-        ESP_LOGI(TAG, "-> %s %s", s_req_topic, json);
-        if (xEventGroupWaitBits(s_ev, GOT_RES, pdTRUE, pdFALSE, pdMS_TO_TICKS(timeout_ms)) & GOT_RES) {
-            *out = s_pending_result;
-            ESP_LOGI(TAG, "<- %s request_id %s %s in %lld ms", s_res_topic, out->request_id,
-                     out->ok ? "ok" : "error", (esp_timer_get_time() - t0) / 1000);
-        } else {
-            ESP_LOGE(TAG, "no response to %s within %d ms", rid, timeout_ms);
-            err = ESP_ERR_TIMEOUT;
-        }
-    }
-    s_pending_id[0] = '\0';
-    free(json);
-    xSemaphoreGive(s_req_lock);
-    return err;
 }
 
 esp_err_t mqtt_link_publish_fw_req(const char *json)

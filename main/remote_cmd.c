@@ -16,7 +16,6 @@
 #include "gnss.h"
 #include "mqtt_link.h"
 #include "ota.h"
-#include "probe_proto.h"
 
 static const char *TAG = "cmd";
 
@@ -92,43 +91,14 @@ static void set_error(cJSON *reply, const char *code, const char *message)
     cJSON_AddStringToObject(reply, "message", message);
 }
 
-static void add_record_result(cJSON *reply, const probe_result_t *r)
+/* "gps": the location (or why there is none) and the GPS status. */
+static void add_gps(cJSON *reply, const char *location, bool fix, const char *status)
 {
     cJSON_AddBoolToObject(reply, "ok", true);
     cJSON *res = cJSON_AddObjectToObject(reply, "result");
-    cJSON_AddStringToObject(res, "kind", r->kind);
-    if (r->id >= 0) {
-        cJSON_AddNumberToObject(res, "record_id", (double)r->id);
-    }
-    if (r->connection_type[0]) {
-        cJSON_AddStringToObject(res, "connection_type", r->connection_type);
-    }
-    if (strcmp(r->kind, "records") == 0) {
-        cJSON_AddNumberToObject(res, "count", r->count);
-    }
-}
-
-/* An MQTT request to the probe server, answered with its result. */
-static void run_probe_request(cJSON *reply, probe_op_t op, int64_t id, const char *value)
-{
-    probe_result_t r;
-    if (mqtt_link_request(op, id, value, &r, 30000) != ESP_OK) {
-        set_error(reply, "timeout", "no answer from the probe server");
-    } else if (!r.ok) {
-        set_error(reply, r.error_code, r.error_message);
-    } else {
-        add_record_result(reply, &r);
-    }
-}
-
-/* "gps": true replaces the value with the location (or why there is none)
- * and echoes the GPS status in the ack. */
-static void add_gps_status(cJSON *reply, bool fix, const char *status)
-{
-    cJSON *res = cJSON_GetObjectItem(reply, "result");
-    cJSON *to = res ? res : reply;
-    cJSON_AddBoolToObject(to, "gps_fix", fix);
-    cJSON_AddStringToObject(to, "gps", status);
+    cJSON_AddStringToObject(res, "location", location);
+    cJSON_AddBoolToObject(res, "gps_fix", fix);
+    cJSON_AddStringToObject(res, "gps", status);
 }
 
 static void add_status(cJSON *reply)
@@ -152,13 +122,8 @@ static void handle(const char *json, size_t len)
     cJSON *cmd = cJSON_ParseWithLength(json, len);
     const char *id = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "id"));
     const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "cmd"));
-    const cJSON *value_item = cJSON_GetObjectItem(cmd, "value");
-    const char *value = cJSON_GetStringValue(value_item);   /* NULL for null/absent */
-    const cJSON *record_id = cJSON_GetObjectItem(cmd, "record_id");
     const cJSON *expires_at = cJSON_GetObjectItem(cmd, "expires_at");
-    const cJSON *gps_item = cJSON_GetObjectItem(cmd, "gps");
     const cJSON *size_item = cJSON_GetObjectItem(cmd, "size");
-    bool gps = cJSON_IsTrue(gps_item);
 
     cJSON *reply = cJSON_CreateObject();
     cJSON_AddStringToObject(reply, "id", id ? id : "");
@@ -178,33 +143,18 @@ static void handle(const char *json, size_t len)
         set_error(reply, "no_clock", "the device clock is not set, cannot check expires_at");
     } else if (expires_at && (double)time(NULL) > cJSON_GetNumberValue(expires_at)) {
         set_error(reply, "expired", "command expired before it arrived");
-    } else if (value_item && !cJSON_IsString(value_item) && !cJSON_IsNull(value_item)) {
-        set_error(reply, "bad_request", "value must be a string or null");
-    } else if (gps_item && !cJSON_IsBool(gps_item)) {
-        set_error(reply, "bad_request", "gps must be true or false");
-    } else if (gps && value) {
-        set_error(reply, "bad_request", "use either value or gps, not both");
-    } else if (gps && ota_busy()) {
-        set_error(reply, "busy", "no GPS reads during an update (they pause PPP)");
-    } else if (gps && strcmp(name, "create") == 0) {
-        char loc[GPS_VALUE_LEN], status[GPS_VALUE_LEN];
-        bool fix = gnss_read(loc, sizeof(loc), status, sizeof(status));
-        run_probe_request(reply, PROBE_OP_CREATE, 0, loc);
-        add_gps_status(reply, fix, status);
     } else if (strcmp(name, "ping") == 0) {
         cJSON_AddBoolToObject(reply, "ok", true);
         cJSON_AddStringToObject(cJSON_AddObjectToObject(reply, "result"), "pong", creds_device_name());
     } else if (strcmp(name, "status") == 0) {
         add_status(reply);
-    } else if (strcmp(name, "create") == 0) {
-        run_probe_request(reply, PROBE_OP_CREATE, 0, value);
-    } else if (strcmp(name, "list") == 0) {
-        run_probe_request(reply, PROBE_OP_LIST, 0, NULL);
-    } else if (strcmp(name, "delete") == 0) {
-        if (!cJSON_IsNumber(record_id)) {
-            set_error(reply, "bad_request", "delete needs a numeric record_id");
+    } else if (strcmp(name, "gps") == 0) {
+        if (ota_busy()) {
+            set_error(reply, "busy", "no GPS reads during an update (they pause PPP)");
         } else {
-            run_probe_request(reply, PROBE_OP_DELETE, (int64_t)cJSON_GetNumberValue(record_id), NULL);
+            char loc[GPS_VALUE_LEN], status[GPS_VALUE_LEN];
+            bool fix = gnss_read(loc, sizeof(loc), status, sizeof(status));
+            add_gps(reply, loc, fix, status);
         }
     } else if (strcmp(name, "ota") == 0) {
         const char *error, *message;
@@ -240,7 +190,7 @@ static void handle(const char *json, size_t len)
         restart = true;
     } else {
         set_error(reply, "unknown_cmd",
-                  "known: ping status create list delete ota restart");
+                  "known: ping status gps ota restart");
     }
 
     send_reply(reply, t0);

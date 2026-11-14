@@ -95,54 +95,36 @@ P-256 key connects; the device certificate alone is refused ("unknown ca"), so t
 
 Safety: the mower stops on its own when the link or acks are lost; never rely on the server.
 
-The gateway already uses `mower/<name>/cmd` → `…/cmd/ack` and `…/status`
+The gateway uses `mower/<name>/cmd` → `…/cmd/ack` and `…/status`
 (format in [06](Mower-Gateway-Plan), "Remote commands").
 
-## rmx-server-app protocol (the probe target)
+## rmx-server-app protocol (what the gateway uses)
 
-The probe server is a CRUD demo on a `records(time, connection_type, value)` table, over
-HTTPS REST, WSS and MQTT. Every change is pushed to all clients.
-
-### MQTT (topic prefix `mower`; moved from `probe/` by issue 53, 2026-11, hardware test pending)
+The records feature (a CRUD demo on a `records` table: `create`/`list`/`update`/`delete` over REST, WSS and MQTT, with
+`mower/<id>/req|res` and `mower/events/records`) was removed from rmx-server-app
+([PR 57](https://github.com/rmx-lt/rmx-server-app/pull/57)) and so from this firmware
+([issue 52](https://github.com/rmx-lt/rmx-mower-gateway/issues/52)). What is left on MQTT (prefix `mower`):
 
 | Topic | Direction | Payload |
 |---|---|---|
-| `mower/<client-id>/req` | client → server | request envelope (JSON) |
-| `mower/<client-id>/res` | server → client | response envelope |
-| `mower/events/records` | server → all | change event |
+| `mower/<name>/status` | device → server, **retained** | `online` / `offline` (also the device's last will) |
+| `mower/<name>/cmd` | server/PC → device | remote command (JSON), see [Mower-Gateway-Plan](Mower-Gateway-Plan) |
+| `mower/<name>/cmd/ack` | device → server/PC | reply (JSON) |
+| `mower/<name>/firmware` | device → server, retained | `{"version","previous","partition","time"}` after an OTA |
 | `mower/status/server` | server → all, **retained** | `online` / `offline` (server's LWT) |
-| `mower/<client-id>/fw/req` | client → server | firmware request (JSON) |
-| `mower/<client-id>/fw/chunk` | server → client | one firmware chunk (binary) |
-| `mower/<client-id>/fw/res` | server → client | firmware info, or a JSON error |
+| `mower/<name>/fw/req` | device → server | firmware request (JSON) |
+| `mower/<name>/fw/chunk` | server → device | one firmware chunk (binary) |
+| `mower/<name>/fw/res` | server → device | firmware info, or a JSON error |
 
-- The server subscribes `mower/+/req` (QoS 1), answers on `mower/<same id>/res` (QoS 1).
-  Client id: 1–64 chars `[A-Za-z0-9_-]`; `events` and `status` are reserved (shared topics).
-- **Which login can a device use?** Its own, e.g. `mower-01`. On 8883 the client id is forced to the username, so the device publishes on `mower/mower-01/req` and subscribes `mower/mower-01/res`, `mower/events/records`, `mower/status/server` (the first two covered by `pattern readwrite mower/%u/#`, the shared ones by the `pattern read` rules). The old `probe-device` login only reached `probe/…` topics. `probe-app` is the server's login, not a device's.
-- Requests (`internal/protocol` in rmx-server-app):
-
-```jsonc
-{ "request_id": "<any string, e.g. uuid>", "request": { "op": "list" } }
-{ "request_id": "r2", "request": { "op": "create", "value": "hello from mower" } }
-{ "request_id": "r3", "request": { "op": "update", "id": 7, "value": null } }
-{ "request_id": "r4", "request": { "op": "delete", "id": 7 } }
-```
-
-- Responses:
-
-```jsonc
-{ "request_id": "r2", "result": { "status": "ok", "data": { "kind": "record", "record": {
-    "id": 7, "time": "2026-10-18T12:00:00Z", "connection_type": "mqtt", "value": "hi",
-    "updated_at": "2026-10-18T12:00:00Z" } } } }
-{ "request_id": "r1", "result": { "status": "ok", "data": { "kind": "records", "records": [ … up to 500 ] } } }
-{ "request_id": "r4", "result": { "status": "ok", "data": { "kind": "deleted", "id": 7 } } }
-{ "request_id": "x",  "result": { "status": "error", "error": { "code": "not_found", "message": "…" } } }
-```
-
-  Error codes: `bad_request`, `not_found`, `internal`, `unauthorized`, `forbidden`, `too_many_requests`.
-  `value` ≤ 1000 characters (or null). A `list` response can be large (≤ 500 records):
-  set the MQTT client's `buffer.size` big enough (e.g. 64 KB, in PSRAM) or avoid `list`.
-- Events: `{"op":"create","record":{…}}`, `{"op":"update","record":{…}}`,
-  `{"op":"delete","id":7,"connection_type":"mqtt"}`.
+- `<name>` is the certificate CN (1–32 chars `[A-Za-z0-9_-]`); the broker forces client id = username. `events` and `status`
+  are reserved (shared topics). The device subscribes `fw/chunk`, `fw/res`, `cmd` and `mower/status/server` on every connect
+  (the shared one is covered by `pattern read mower/status/server`, the others by `pattern readwrite mower/%u/#`).
+- The device no longer subscribes `mower/<name>/res` or `mower/events/records`, and publishes nothing on `mower/<name>/req`.
+- The wire contract is in wiki [Server-App](Server-App). The server's HTTP and WebSocket parts
+  are not used by the gateway. The server was renamed (probe naming dropped,
+  [PR 60](https://github.com/rmx-lt/rmx-server-app/pull/60)); the VPS still runs the old build until
+  [rmx-server-infra#85](https://github.com/rmx-lt/rmx-server-infra/issues/85), which does not matter for the firmware: the
+  topics above are the same on both.
 
 ## Firmware over MQTT
 
@@ -182,6 +164,6 @@ in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway do
 
 ### HTTPS
 
-Browsers still use `https://api.rmx.lt/probe/…` (wiki [Server-App](Server-App)). The gateway
-firmware does not. `tools/ppp_smoke` still does one GET `/probe/health` as a pipe check.
+Browsers use the server's HTTP API (wiki [Server-App](Server-App); the path prefix changes with the server rename). The gateway
+firmware does not. `tools/ppp_smoke` still does one GET `/probe/health` as a pipe check (old server path).
 NVS holds no web or firmware-download password.

@@ -1,4 +1,4 @@
-# Build a signed probe image and upload it to the VPS for OTA.
+# Build a signed gateway image and upload it to the VPS for OTA.
 #
 #   tools\release.ps1                 # builds version.txt's version, uploads, prints the ota command
 #   tools\release.ps1 -Send           # ... and sends it to the device (tools\mqtt_cmd.ps1 ota)
@@ -26,7 +26,7 @@ try {
         $cfg -notmatch '(?m)^CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE_PATH="certs/rmx-ca-bundle.pem"') {
         throw 'sdkconfig still uses the full CA bundle: copy the TLS lines from sdkconfig.defaults (wiki page Mower-Gateway)'
     }
-    $bin = 'build\rmx_mower_modem_probe.bin'
+    $bin = 'build\rmx_mower_gateway.bin'
     $size = (Get-Item $bin).Length
     $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLower()
     Write-Host "image $version, $size bytes, sha256 $sha"
