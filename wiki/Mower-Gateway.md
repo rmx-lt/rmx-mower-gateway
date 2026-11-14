@@ -30,12 +30,13 @@ Details: [Mower-Gateway-Plan](Mower-Gateway-Plan).
 
 ## Build, configure, flash (PowerShell)
 
+PlatformIO is the main tool (since 2026-11-14); `idf.py` is a fallback, see [Mower-Gateway-Tools](Mower-Gateway-Tools).
+
 ```powershell
-. C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
-idf.py set-target esp32     # first time only
-idf.py menuconfig           # "rmx gateway": APN, broker URL (no logins, no passwords)
-idf.py build
-idf.py -p COM6 -b 921600 flash
+$pio = "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe"
+& $pio run -e gateway                  # build + sign (needs keys\ota_signing_key.pem)
+& $pio run -e gateway -t menuconfig    # "rmx gateway": APN, broker URL (no logins, no passwords)
+& $pio run -e gateway -t upload        # flash on COM6
 tools\provision_cert.ps1 -Name mower-02   # new board: CSR with that name, sign it, store the certificate (wiki Device-CA)
 python -I -u tools\serial_log.py COM6 120 --until STARTUP
 ```
@@ -72,7 +73,7 @@ afterwards and 0.3.3 (without it) arrived by OTA with the key and chain untouche
 
 Provisioning a new board end to end (needs the device CA, wiki Device-CA, and its passphrase):
 
-1. `idf.py -p COM6 flash` (or the PlatformIO `gateway` env). The board makes its key and waits.
+1. `pio run -e gateway -t upload` (or `idf.py -p COM6 flash`). The board makes its key and waits.
 2. `tools\provision_cert.ps1 -Name mower-02`: resets the board, asks for the CSR, runs
    `device-ca.ps1 sign` (asks for the issuing passphrase), sends the chain over serial.
 3. The board answers `RMX-CERT-OK mower-02`, restarts, logs `login: client certificate` and
@@ -142,18 +143,18 @@ One-time setup (the bootloader can't be updated over the air, so this needs USB)
 mkdir keys
 espsecure generate-signing-key --version 2 --scheme rsa3072 keys\ota_signing_key.pem
 # back up keys\ota_signing_key.pem offline: without it, no more OTA (only a USB flash with a new key)
-idf.py -p COM6 -b 921600 flash
+~\.platformio\penv\Scripts\pio.exe run -e gateway -t upload
 tools\provision_cert.ps1 -Name mower-01   # client certificate (name = certificate CN)
 ```
 
-An existing `sdkconfig` keeps its old values: add the OTA block from `sdkconfig.defaults`
+An existing `sdkconfig.gateway` (`sdkconfig` for idf.py) keeps its old values: add the OTA block from `sdkconfig.defaults`
 to it (or set the same options in menuconfig) before that build.
 
 Each release:
 
 ```powershell
 # bump version.txt (the device refuses the version it already runs)
-tools\release.ps1 -Send    # build + sign, upload to the VPS, send the ota command
+tools\release.ps1 -Send    # PlatformIO build + sign, check version and signature, upload, send the ota command
 tools\mqtt_cmd.ps1 status  # result.version, result.ota (state, progress, error), rolled_back_from
 ```
 

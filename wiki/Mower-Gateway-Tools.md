@@ -54,14 +54,18 @@ while time.time() - t < 60:
     print(s.read(4096).decode("utf-8", "replace"), end="")
 ```
 
-## PlatformIO build (alternative to idf.py)
+## PlatformIO build (the main tool)
 
-`platformio.ini` builds the gateway firmware (`main/`) with PlatformIO next to `idf.py`; `idf.py` stays the reference build and
-`tools/ppp_smoke` and `tools/at_bridge` are idf.py only. Both builds read `sdkconfig.defaults` and `partitions.csv`.
+PlatformIO is the main tool for building, flashing and releasing the gateway firmware (`main/`; owner's decision 2026-11-14,
+issue 53). `idf.py` is a fallback for the same firmware (it writes `sdkconfig`, PlatformIO writes `sdkconfig.gateway`: two separate configs)
+and the only build for `tools/ppp_smoke` and `tools/at_bridge`. Both builds read `sdkconfig.defaults` and `partitions.csv`.
+No CI build: firmware is built on the PC only (owner's decision 2026-11-14).
 
 ```powershell
 ~\.platformio\penv\Scripts\pio.exe run -e gateway            # build (first build ~13 min, downloads ~1.5-2 GB)
 ~\.platformio\penv\Scripts\pio.exe run -e gateway -t upload  # flash on COM6
+~\.platformio\penv\Scripts\pio.exe run -e gateway -t menuconfig  # interactive
+tools\release.ps1 -BuildOnly    # release build: fresh CMake configure, version and signature checked, no upload
 ```
 
 Verified on hardware 2026-11-08:
@@ -72,4 +76,4 @@ Verified on hardware 2026-11-08:
 - Flashing with `pio ... -t upload` keeps NVS (credentials); the CH9102 auto-reset works with the default settings (no `monitor_rts`/`monitor_dtr` override needed); `serial_log.py` also works as before.
 - The PlatformIO-built image passed the PPP/MQTT self-test. An HTTPS OTA to a PlatformIO-built, signed 0.2.4 image succeeded before firmware download moved to MQTT (`ota_0` to `ota_1`, confirmed).
 - 2026-11-10: `pio run -e probe` (now `-e gateway`) signed `firmware.bin` (729088 bytes; RAM 20752/327680, flash 706493/4194304). USB flash of 0.3.0 on COM6 passed the self-test. `0.3.1.bin` (same tree, version string only) was copied to the server firmware dir and installed by `tools\mqtt_cmd.ps1 ota -Version 0.3.1 -Size 729088`. See [Mower-Gateway-Plan](Mower-Gateway-Plan).
-- `tools/release.ps1` is idf.py only; for a PlatformIO image upload `firmware.bin` as `<version>.bin` by hand and send `tools\mqtt_cmd.ps1 ota`. Use PowerShell's `ssh`/`scp` (Git Bash's has no key).
+- `tools/release.ps1` builds with PlatformIO (since issue 53): it deletes `.pio/build/gateway/CMakeCache.txt` so `version.txt` is read, checks that the image's app description carries that version and that `espsecure verify_signature` accepts it, then uploads `firmware.bin` as `<version>.bin`. Use PowerShell's `ssh`/`scp` (Git Bash's has no key).
