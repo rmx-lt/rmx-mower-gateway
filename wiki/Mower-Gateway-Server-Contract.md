@@ -9,7 +9,7 @@ Re-read those before coding: they are the source of truth and may have changed.
 
 | Endpoint | What | TLS |
 |---|---|---|
-| `https://api.rmx.lt/app/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
+| `https://rmx.lt/app/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
 | `mqtts://mqtt.rmx.lt:8883` | Mosquitto 2.1, MQTT 3.1.1/5 over TLS (min TLS 1.2) | LE cert copied from Caddy |
 
 Browsers do not speak MQTT. `https://mqtt.rmx.lt` only tells clients to use `mqtts://mqtt.rmx.lt:8883`.
