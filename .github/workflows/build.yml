@@ -3,11 +3,26 @@
 # signing key (keys/ is gitignored and the real key never leaves the owner's
 # PC): the image is built and signed the same way, but cannot be installed.
 # Kept out of rmx.yml, which must match the shared caller template.
+# The push run saves the PlatformIO cache on development: a PR can only read
+# caches from its own ref and its base branch, so without it every PR starts
+# cold (~15 min instead of a few).
 name: build
 
 on:
   pull_request:
     branches: [development]
+  push:
+    branches: [development]
+    paths:
+      - 'main/**'
+      - 'certs/**'
+      - 'CMakeLists.txt'
+      - 'platformio.ini'
+      - 'partitions.csv'
+      - 'sdkconfig.defaults'
+      - 'sign_ota.py'
+      - 'version.txt'
+      - '.github/workflows/build.yml'
 
 permissions:
   contents: read

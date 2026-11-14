@@ -39,7 +39,8 @@ try {
     $bin = '.pio\build\gateway\firmware.bin'
     # The app description (esp_app_desc_t) starts at 0x20: magic 0xABCD5432, version at 0x30.
     $bytes = [IO.File]::ReadAllBytes((Resolve-Path $bin))
-    if ([BitConverter]::ToUInt32($bytes, 0x20) -ne 0xABCD5432) { throw "$bin has no app description at 0x20" }
+    # ToInt32: PowerShell reads the literal 0xABCD5432 as a (negative) Int32.
+    if ([BitConverter]::ToInt32($bytes, 0x20) -ne 0xABCD5432) { throw "$bin has no app description at 0x20" }
     $built = [Text.Encoding]::ASCII.GetString($bytes, 0x30, 32).TrimEnd([char]0)
     if ($built -ne $version) { throw "image version '$built' is not version.txt '$version'" }
     # sign_ota.py signs after every build; check it, so an unsigned image never ships.
