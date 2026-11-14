@@ -9,15 +9,14 @@ Re-read those before coding: they are the source of truth and may have changed.
 
 | Endpoint | What | TLS |
 |---|---|---|
-| `https://api.rmx.lt/probe/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
+| `https://api.rmx.lt/app/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
 | `mqtts://mqtt.rmx.lt:8883` | Mosquitto 2.1, MQTT 3.1.1/5 over TLS (min TLS 1.2) | LE cert copied from Caddy |
 
 Browsers do not speak MQTT. `https://mqtt.rmx.lt` only tells clients to use `mqtts://mqtt.rmx.lt:8883`.
 
 - VPS `45.81.252.43` (`api`, `mqtt` are CNAMEs to `rmx.lt`). IPv4 only.
-- **The probe is off by default on the VPS** (owner starts it when needed). Off → `/probe/*`
-  returns 502. On 2026-10-19 it was on: `GET /probe/health` → `200 {"status":"ok","db":true,"mqtt":true,"version":"0.1.0"}`
-  (one earlier request that day got 401 — probably during a redeploy).
+- rmx-server-app runs always on the VPS (since 2026-11-14; before that the probe at `/probe/…`, off by default).
+  `GET /app/health` → `200 {"status":"ok","db":true,"mqtt":true,"version":"0.1.0"}` (checked 2026-11-14).
 - Mosquitto on 8883 runs always.
 
 ## TLS certificate chain (checked 2026-10-19 with openssl)
@@ -164,6 +163,6 @@ in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway do
 
 ### HTTPS
 
-Browsers use the server's HTTP API (wiki [Server-App](Server-App); the path prefix changes with the server rename). The gateway
-firmware does not. `tools/ppp_smoke` still does one GET `/probe/health` as a pipe check (old server path).
+Browsers use the server's HTTP API (wiki [Server-App](Server-App), under `/app/`). The gateway
+firmware does not. `tools/ppp_smoke` still does one GET `/app/health` as a pipe check.
 NVS holds no web or firmware-download password.

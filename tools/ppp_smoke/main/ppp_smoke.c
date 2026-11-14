@@ -4,7 +4,7 @@
  * 1. powers the modem with the board's pin sequence (or finds it running),
  * 2. starts PPP with esp_modem (the modem is only a data pipe; TLS runs in
  *    mbedTLS on the ESP32),
- * 3. HTTPS GET https://api.rmx.lt/probe/health (cert bundle verification),
+ * 3. HTTPS GET https://api.rmx.lt/app/health (cert bundle verification),
  * 4. MQTT over TLS to mqtts://mqtt.rmx.lt:8883 with a deliberately invalid
  *    login: a "not authorized" CONNACK proves TLS + MQTT reach Mosquitto
  *    without needing a real password.
@@ -79,7 +79,7 @@ static void https_health(void)
 {
     char body[256] = {0};
     esp_http_client_config_t cfg = {
-        .url = "https://api.rmx.lt/probe/health",
+        .url = "https://api.rmx.lt/app/health",
         .crt_bundle_attach = esp_crt_bundle_attach,
         .timeout_ms = 20000,
     };
@@ -89,7 +89,7 @@ static void https_health(void)
     if (err == ESP_OK) {
         esp_http_client_fetch_headers(c);
         int n = esp_http_client_read_response(c, body, sizeof(body) - 1);
-        ESP_LOGI(TAG, "HTTPS GET /probe/health -> %d in %lld ms: %.*s",
+        ESP_LOGI(TAG, "HTTPS GET /app/health -> %d in %lld ms: %.*s",
                  esp_http_client_get_status_code(c),
                  (esp_timer_get_time() - t0) / 1000, n > 0 ? n : 0, body);
     } else {
