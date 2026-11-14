@@ -14,12 +14,13 @@ that connects over LTE to **rmx-server** and talks to **rmx-server-app** with
 
 ## Build, configure, flash (PowerShell)
 
+PlatformIO is the main tool; `idf.py` is a fallback (wiki Mower-Gateway-Tools).
+
 ```powershell
-. C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
-idf.py set-target esp32     # first time only
-idf.py menuconfig           # "rmx gateway": APN, broker URL (no logins, no passwords)
-idf.py build
-idf.py -p COM6 -b 921600 flash
+$pio = "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe"
+& $pio run -e gateway                  # build + sign (needs keys\ota_signing_key.pem)
+& $pio run -e gateway -t menuconfig    # "rmx gateway": APN, broker URL (no logins, no passwords)
+& $pio run -e gateway -t upload        # flash on COM6
 tools\provision_cert.ps1 -Name mower-02   # new board: CSR for that name, sign it, store the certificate
 python -I -u tools\serial_log.py COM6 120 --until STARTUP
 ```
@@ -31,7 +32,7 @@ The script asks it over the serial port for a CSR with CN `<name>` (the name is 
 has the device CA sign it (`device-ca.ps1`, asks for the issuing passphrase) and writes the chain
 (device + issuing certificate) back into `creds/chain`, leaving the key and every other NVS key alone.
 Then the board logs in on port 8884 and takes its name (MQTT login and the `<name>` in `mower/<name>/...`)
-from the certificate CN. `idf.py flash` and OTA leave NVS alone; `idf.py erase-flash` removes it, key
+from the certificate CN. Flashing (`-t upload`) and OTA leave NVS alone; erasing the flash removes it, key
 included (a new key needs a new certificate).
 
 ## Layout
