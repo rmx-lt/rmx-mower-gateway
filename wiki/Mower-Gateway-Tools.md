@@ -59,7 +59,7 @@ while time.time() - t < 60:
 PlatformIO is the main tool for building, flashing and releasing the gateway firmware (`main/`; owner's decision 2026-11-14,
 issue 53). `idf.py` is a fallback for the same firmware (it writes `sdkconfig`, PlatformIO writes `sdkconfig.gateway`: two separate configs)
 and the only build for `tools/ppp_smoke` and `tools/at_bridge`. Both builds read `sdkconfig.defaults` and `partitions.csv`.
-CI (`.github/workflows/build.yml`) runs `pio run -e gateway` on every PR, signing with a throwaway key.
+No CI build: firmware is built on the PC only (owner's decision 2026-11-14).
 
 ```powershell
 ~\.platformio\penv\Scripts\pio.exe run -e gateway            # build (first build ~13 min, downloads ~1.5-2 GB)
