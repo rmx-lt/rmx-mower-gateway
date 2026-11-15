@@ -11,11 +11,14 @@ to **rmx-server** and talks to **rmx-server-app** with **MQTT over TLS** only.
 ## Status
 
 Firmware working on the hardware: over LTE (PPP) it logs in to the broker with its
-client certificate (name = certificate CN, e.g. `mower-01`), publishes the retained status
-`mower/<name>/status` (last will `offline`) and takes remote commands from the PC on
-`mower/<name>/cmd` and replies on `…/cmd/ack`. A new image is requested as MQTT chunks on
-`mower/<name>/fw/req` and written from `mower/<name>/fw/chunk`. The firmware has no HTTPS
-client. Verified 2026-11-10: a USB flash of 0.3.0 passed the MQTT self-test, an unknown
+client certificate (name = certificate CN, e.g. `mower-01`) and speaks the gateway's side of
+[Mower-Protocol](Mower-Protocol) (issue 61, verified 2026-11-15, see [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract)):
+the retained status `mower/<name>/gateway/status` (last will `offline`), the retained `gateway/state`,
+the metric catalogue `gateway/metrics/…`, `gateway/telemetry` (signal, system, data usage), commands on
+`gateway/cmd` with acks on `gateway/cmd/ack`, monitor streams on `gateway/monitor`. A new image is requested as MQTT
+chunks on `gateway/fw/req` and written from `gateway/fw/chunk`. Clean session, keep-alive 15 s. The firmware has no HTTPS
+client. The NTRIP client and the link to the autopilot board are not in the firmware yet (other issues).
+Older text below that names the unprefixed topics (`mower/<name>/status`, `cmd`, `fw/…`) describes firmware up to 0.3.x. Verified 2026-11-10: a USB flash of 0.3.0 passed the MQTT self-test, an unknown
 file returned `not_found` and left 0.3.0 running, and `ota` of `0.3.1.bin` (729088 bytes,
 178 chunks) wrote the image, matched the chunk-header SHA-256, rebooted into `ota_1`, and
 confirmed on the first MQTT connect. A reset at 10% was a clean retry from the first chunk.
@@ -96,17 +99,20 @@ to the default bundle* with path `certs/rmx-ca-bundle.pem` (or copy the four TLS
 
 ```powershell
 tools\mqtt_cmd.ps1 ping
-tools\mqtt_cmd.ps1 status
-tools\mqtt_cmd.ps1 gps                  # GPS location, or "gps unavailable: <why>"
 tools\mqtt_cmd.ps1 restart
-tools\mqtt_cmd.ps1 ota -Version 0.2.5 -Size 851234   # file = 0.2.5.bin; see "Firmware updates"
+tools\mqtt_cmd.ps1 ota -Version 0.4.0 -Size 851234   # file = 0.4.0.bin; see "Firmware updates"
+tools\mqtt_cmd.ps1 monitor_start -Session m-1 -Metrics usage.total.up,usage.total.down -Rate 2 -Hold 20
+tools\mqtt_cmd.ps1 monitor_stop -Session m-1
+tools\mqtt_cmd.ps1 ping -Id c-1 -Repeat 1       # the same id twice: the same ack twice
+tools\mqtt_watch.ps1 -Seconds 120               # state, catalogue, telemetry, monitor, acks
 ```
 
-Commands: `ping status gps ota restart`. Each carries
-`expires_at` (now + `-TtlS`, default 60 s). `gps` returns the device's GNSS location
-(`result.location`, `result.gps` status, `result.gps_fix`); without a fix `location` is `gps unavailable: …` and the status says why.
-`create`, `list` and `delete` (records) were removed: they now return `unknown_cmd`.
-Needs the Mosquitto clients for Windows and `ssh rmx-vps`.
+Commands: `ping restart ota monitor_start monitor_stop` ([Mower-Protocol](Mower-Protocol) §5, §6.4, §15; details in
+[Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract)). Each carries
+`expires_at` (now + `-TtlS`, default 60 s). `status` and `gps` were removed (the modem's GNSS is not used; the data
+is in `gateway/state` and `gateway/telemetry`). `ntrip_set`, `ntrip_clear` and `autopilot_reset` are other issues
+(`unknown_cmd` / `failed`). The scripts log in as `app`; the broker forces client id `app`, so two of them at the same
+time disconnect each other. Needs the Mosquitto clients for Windows and `ssh rmx-vps`.
 
 ## Firmware updates (OTA)
 
@@ -128,14 +134,16 @@ The byte layout is wiki [Server-App](Server-App#firmware-over-mqtt). The device 
 - **Whole-image SHA-256.** Every chunk header carries the SHA-256 of the file. The device
   hashes the bytes it wrote and compares them before `esp_ota_set_boot_partition`.
 - **File name.** The `ota` command's `version` selects `<version>.bin`, a file in the server's
-  firmware folder (wiki [Server-Infra](Server-Infra#firmware-images-ota) §10). An optional `file` (or the last
-  segment of a legacy `url`) names the file instead. The device does not open HTTPS.
-- **Report.** Once a new image has confirmed itself, it tells the server once: a retained
-  `{"version","previous","partition","time"}` on `mower/<name>/firmware`.
-- **Retries.** One chunk request is in flight. A timeout retries that chunk (same request id,
-  up to 3 more times). Bytes already written stay, so a reconnect resumes at the next chunk.
-  A reset of the board drops the in-memory progress; the next `ota` command starts again.
-  The running firmware is untouched until the whole image checks out.
+  firmware folder (wiki [Server-Infra](Server-Infra#firmware-images-ota) §10). An optional `file` names the file
+  instead (the legacy `url` is gone). The device does not open HTTPS.
+- **Report.** The final ack comes from the new image (Mower-Protocol §6.5): the command id is kept in NVS across the
+  restart; once the new image has confirmed itself and the server link is up it sends `done` with
+  `{"version","previous","partition"}` (`previous` also shows in `gateway/state`). If the new image does not confirm,
+  the old one boots again and sends `failed` with `rolled_back`. The retained `mower/<name>/firmware` topic is gone.
+- **Retries.** One chunk request is open at a time. After 10 s without an answer the same chunk is requested again
+  with a new request id, up to 5 times in a row; then the update ends with `download_failed` (so does an error
+  answer from the server). Bytes already written stay. A reset of the board drops the progress; the next `ota`
+  command starts again. The running firmware is untouched until the whole image checks out.
 
 One-time setup (the bootloader can't be updated over the air, so this needs USB):
 
@@ -148,21 +156,22 @@ tools\provision_cert.ps1 -Name mower-01   # client certificate (name = certifica
 ```
 
 An existing `sdkconfig.gateway` (`sdkconfig` for idf.py) keeps its old values: add the OTA block from `sdkconfig.defaults`
-to it (or set the same options in menuconfig) before that build.
+to it (or set the same options in menuconfig) before that build. The same goes for the two FreeRTOS options at the end
+(`CONFIG_FREERTOS_USE_TRACE_FACILITY`, `CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS`, needed for the `system.cpu` metrics):
+delete `sdkconfig.gateway` or add them.
 
 Each release:
 
 ```powershell
 # bump version.txt (the device refuses the version it already runs)
 tools\release.ps1 -Send    # PlatformIO build + sign, check version and signature, upload, send the ota command
-tools\mqtt_cmd.ps1 status  # result.version, result.ota (state, progress, error), rolled_back_from
+tools\mqtt_watch.ps1      # gateway/state shows firmware, previous and partition; the final ack arrives on gateway/cmd/ack
 ```
 
 The `ota` command: `{"id":"…","cmd":"ota","version":"0.2.5","file":"0.2.5.bin","size":851234}`.
-`file` defaults to `<version>.bin`. It acks `started` at once, then `done` before the restart,
-or an error: `busy`, `same_version`, `low_signal`, `bad_image` (wrong project or version, bad
-signature or SHA-256), `bad_size`, `download_failed`, `not_found`, `bad_request`, `internal`,
-`failed`. The signed PlatformIO image of 0.3.0 / 0.3.1 (2026-11-10) is 729088 bytes
+`file` defaults to `<version>.bin`. It acks `accepted` at once, then (from the new image, after the restart)
+`done`, or an error: `busy`, `same_version`, `low_signal`, `bad_image` (wrong project or version, bad
+signature or SHA-256), `bad_size`, `download_failed`, `rolled_back`, `bad_request`, `failed`. The signed PlatformIO image of 0.3.0 / 0.3.1 (2026-11-10) is 729088 bytes
 (RAM 20752/327680, flash 706493/4194304), plus a 64-byte header on each 4096-byte chunk.
 The 0.3.1 download took 97 s (178 chunks). The esp-mqtt receive buffer is 8192 bytes so
 that frame arrives in one event; a fragmented `MQTT_EVENT_DATA` is still reassembled.
@@ -170,9 +179,10 @@ that frame arrives in one event; a fragmented `MQTT_EVENT_DATA` is still reassem
 ## Layout
 
 ```
-main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, gnss, ota
+main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, ota, gwstate (boot, state),
+             metrics (catalogue, telemetry, monitor), usage (data counters)
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
-             mqtt_cmd.ps1 (remote commands), release.ps1 (signed OTA release)
+             mqtt_cmd.ps1 (remote commands), mqtt_watch.ps1 (read the gateway topics), release.ps1 (signed OTA release)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release
 certs/       ISRG Root X1/X2 PEMs (public CA roots for rmx.lt's Let's Encrypt chain)
 ```
