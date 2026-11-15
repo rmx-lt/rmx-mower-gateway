@@ -1,24 +1,31 @@
-/* Remote commands over MQTT: mower/<user>/cmd in, mower/<user>/cmd/ack out.
+/* Gateway commands (wiki Mower-Protocol §5, §6.4): mower/<name>/gateway/cmd in,
+ * gateway/cmd/ack out.
  *
- * Command: {"id":"c1","cmd":"ping","expires_at":1760900000,...}
- *   cmd: ping | status | gps | ota (version, file or url, size) | restart
- *   expires_at: optional unix time (s); expired or unclocked commands are refused.
- *   gps: reads the GNSS location (or "gps unavailable: <why>"); the ack result
- *        has "location", "gps" (status) and "gps_fix".
- *   ota: version (must match the image header), file (name on the server,
- *        default <version>.bin; a url's last segment is used when file is
- *        absent), size (bytes, optional). The image is downloaded as MQTT
- *        chunks. Acks "started" at once, then a second ack "done" (and a
- *        restart into the new image) or an error: busy, same_version,
- *        low_signal, bad_image, bad_size, download_failed, not_found,
- *        bad_request, internal, failed. Progress is in "status" (result.ota).
- * Reply:   {"id":"c1","cmd":"ping","ok":true,"result":{...},"ms":12}
- *          {"id":"c1","cmd":"x","ok":false,"error":"<code>","message":"..."}
+ * Command: {"id":"c1","cmd":"ping","expires_at":1794650060,...}
+ *   cmd: ping | restart | ota | monitor_start | monitor_stop
+ *   (ntrip_set, ntrip_clear and autopilot_reset belong to the autopilot and
+ *   NTRIP issues; ntrip_* answer unknown_cmd, autopilot_reset "failed")
+ * Ack: {"id","cmd","ok":true,"state":"accepted|done","result":{...},"time":1794650001.1}
+ *      {"id","cmd","ok":false,"state":"failed","error":"<code>","message":"...","time":...}
+ * Every command gets one final ack (done or failed); ota first gets accepted.
+ * Command ids are remembered for 3 minutes with their last ack; the same id
+ * again repeats that ack and does not run the command again.
  */
 #pragma once
 
+#include "cJSON.h"
 #include "esp_err.h"
 
 /* Creates the worker task and registers with mqtt_link. Call before
  * mqtt_link_start(). */
 esp_err_t remote_cmd_init(void);
+
+/* Sends and remembers an ack. state is "accepted", "done" or "failed"; error and
+ * message are only for "failed". result (optional) is owned by the call.
+ * Callable from any task. */
+void cmd_ack(const char *id, const char *cmd, const char *state, const char *error,
+             const char *message, cJSON *result);
+
+/* Remembers an ack without sending it: for a command that was open across a
+ * restart, so a resend of its id gets the "accepted" ack again. */
+void cmd_remember_accepted(const char *id, const char *cmd);

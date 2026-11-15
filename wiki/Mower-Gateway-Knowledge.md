@@ -29,11 +29,11 @@ Data path  esp_modem 2.1.0 PPP (ESP_MODEM_DCE_SIM7600) + mbedTLS + espressif/mqt
 Server     mqtts://mqtt.rmx.lt:8884 (client certificate, client id := CN; 8883 is the password listener for the app and PC tools). Firmware files (<version>.bin) come as MQTT chunks from the app.
 Trust      ISRG Root X1 + X2 (LE Gen-Y ECDSA chain)
 Proven     PPP → MQTTS. tools/ppp_smoke still does one HTTPS GET https://app.rmx.lt/health; the gateway firmware does not.
-Firmware   main/ (repo root): MQTT login with the client certificate (name = CN): status, cmd/ack and mower/<name>/fw/… (no records protocol since issue 52)
+Firmware   main/ (repo root): MQTT login with the client certificate (name = CN); the gateway side of Mower-Protocol: mower/<name>/gateway/status, state, telemetry, metrics/…, monitor, cmd, cmd/ack, fw/… (issue 61)
 Logins     certificate only: board-made P-256 key + chain in NVS (tools/provision_cert.ps1 -Name <name>), name = CN, port 8884, no password anywhere on the board (live-verified 2026-11-11). See Mower-Gateway "Identity"
-Commands   PC → mower/<name>/cmd → device → …/cmd/ack (tools/mqtt_cmd.ps1, login app) — verified
+Commands   PC → mower/<name>/gateway/cmd → device → …/gateway/cmd/ack (tools/mqtt_cmd.ps1, login app; tools/mqtt_watch.ps1 reads the rest) — verified 2026-11-15; a repeated id gets the same ack
 OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. Verified 2026-11-10: 0.3.0 USB flash, unknown file `not_found`, reset at 10% then clean retry, 0.3.1 confirmed on ota_1 (97 s, 729088 bytes).
-GNSS       "gps": true on create; AT via esp_modem_pause_net (~2 s, links survive) — fix and no-fix verified
+GNSS       the modem's GNSS is no longer used by the firmware (Mower-Protocol §1); AT in PPP via esp_modem_pause_net (~2 s) still runs once a minute for the signal reading
 ```
 
 ## Local reference material

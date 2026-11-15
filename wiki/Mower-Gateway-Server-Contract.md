@@ -89,63 +89,91 @@ P-256 key connects; the device certificate alone is refused ("unknown ca"), so t
 
 The contract between the mower and the server is wiki [Mower-Protocol](Mower-Protocol): every topic names its
 source (`mower/<name>/gateway/…`, `mower/<name>/autopilot/…`), the gateway relays the autopilot's messages without
-reading them, and it runs the NTRIP client and the link to the autopilot board. The firmware does not implement it yet
-([blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6)); the rest of this page is what it does today.
+reading them, and it runs the NTRIP client and the link to the autopilot board. The firmware implements the
+**gateway's own side** (§3 to §6, §12, §15, §16) since [issue 61](https://github.com/rmx-lt/rmx-mower-gateway/issues/61)
+(first released in the firmware after 0.3.0); the NTRIP client and the autopilot link are separate issues
+([blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6)). The unprefixed topics of older firmware
+(`mower/<name>/status`, `cmd`, `cmd/ack`, `firmware`, `fw/…`) are gone; the first boot of the new firmware clears the
+retained `status` and `firmware` messages that the old one left on the broker (flag `legacy` in NVS).
 
-Today the gateway uses `mower/<name>/cmd` → `…/cmd/ack` and `…/status`
-(format in [06](Mower-Gateway-Plan), "Remote commands").
+## What the gateway uses on MQTT (prefix `mower`)
 
-## rmx-server-app protocol (what the gateway uses)
+| Topic | Direction | QoS | Retained | Payload |
+|---|---|---|---|---|
+| `mower/status/server` | server → all | 1 | yes | `online` / `offline` (server's LWT); the device only reads it |
+| `mower/<name>/gateway/status` | device → server | 1 | yes | `online` / `offline` (also the last will) |
+| `mower/<name>/gateway/state` | device → server | 1 | yes | `{"protocol","boot","firmware","previous","partition","autopilot_link","ntrip","operator","time"}` |
+| `mower/<name>/gateway/telemetry` | device → server | 0 | no | `{"time","boot","metrics":{…}}`, every 60 s |
+| `mower/<name>/gateway/metrics/index`, `…/metrics/<part>` | device → server | 1 | yes | metric catalogue (parts `signal`, `usage`, `system`) |
+| `mower/<name>/gateway/monitor` | device → server | 0 | no | monitor samples (on request) |
+| `mower/<name>/gateway/cmd` | server/PC → device | 1 | no | command (JSON) |
+| `mower/<name>/gateway/cmd/ack` | device → server/PC | 1 | no | ack (JSON) |
+| `mower/<name>/gateway/fw/req` | device → server | 1 | no | chunk request (JSON) |
+| `mower/<name>/gateway/fw/chunk` | server → device | 1 | no | one firmware chunk (binary) |
+| `mower/<name>/gateway/fw/res` | server → device | 1 | no | JSON error for a request |
 
-The records feature (a CRUD demo on a `records` table: `create`/`list`/`update`/`delete` over REST, WSS and MQTT, with
-`mower/<id>/req|res` and `mower/events/records`) was removed from rmx-server-app
-([PR 57](https://github.com/rmx-lt/rmx-server-app/pull/57)) and so from this firmware
-([issue 52](https://github.com/rmx-lt/rmx-mower-gateway/issues/52)). What is left on MQTT (prefix `mower`):
-
-| Topic | Direction | Payload |
-|---|---|---|
-| `mower/<name>/status` | device → server, **retained** | `online` / `offline` (also the device's last will) |
-| `mower/<name>/cmd` | server/PC → device | remote command (JSON), see [Mower-Gateway-Plan](Mower-Gateway-Plan) |
-| `mower/<name>/cmd/ack` | device → server/PC | reply (JSON) |
-| `mower/<name>/firmware` | device → server, retained | `{"version","previous","partition","time"}` after an OTA |
-| `mower/status/server` | server → all, **retained** | `online` / `offline` (server's LWT) |
-| `mower/<name>/fw/req` | device → server | firmware request (JSON) |
-| `mower/<name>/fw/chunk` | server → device | one firmware chunk (binary) |
-| `mower/<name>/fw/res` | server → device | firmware info, or a JSON error |
-
-- `<name>` is the certificate CN (1–32 chars `[A-Za-z0-9_-]`); the broker forces client id = username. `events` and `status`
-  are reserved (shared topics). The device subscribes `fw/chunk`, `fw/res`, `cmd` and `mower/status/server` on every connect
-  (the shared one is covered by `pattern read mower/status/server`, the others by `pattern readwrite mower/%u/#`).
-- The device no longer subscribes `mower/<name>/res` or `mower/events/records`, and publishes nothing on `mower/<name>/req`.
+- `<name>` is the certificate CN (1–32 chars `[A-Za-z0-9_-]`); the broker forces client id = username. `status` is
+  reserved (the shared `mower/status/server`). The device subscribes `gateway/cmd`, `gateway/fw/chunk`,
+  `gateway/fw/res` and `mower/status/server` on every connect (the shared one is covered by
+  `pattern read mower/status/server`, the others by `pattern readwrite mower/%u/#`).
+- Connection: **clean session**, **keep-alive 15 s** (verified on the board, see [Mower-Gateway](Mower-Gateway)).
+- **Server link** (Mower-Protocol §4.2): MQTT is up **and** the retained `mower/status/server` is `online`. When it
+  comes up (also after boot) the gateway publishes `gateway/state` and the catalogue again; monitor streams end when
+  it has been down 10 s (`main/mqtt_link.c`, `main/metrics.c`).
+- The `autopilot/…` topics are not used yet (no board link).
 - What the server serves today is in wiki [Server-App](Server-App); the contract both sides move to is
-  [Mower-Protocol](Mower-Protocol). The server's HTTP and WebSocket parts
-  are not used by the gateway. The server was renamed (probe naming dropped,
-  [PR 60](https://github.com/rmx-lt/rmx-server-app/pull/60)); the VPS still runs the old build until
-  [rmx-server-infra#85](https://github.com/rmx-lt/rmx-server-infra/issues/85), which does not matter for the firmware: the
-  topics above are the same on both.
+  [Mower-Protocol](Mower-Protocol). The server's HTTP and WebSocket parts are not used by the gateway.
+
+### Commands and acks
+
+`ping`, `restart`, `ota`, `monitor_start`, `monitor_stop` (Mower-Protocol §5, §6.4, §15). `ntrip_set` / `ntrip_clear`
+answer `unknown_cmd` and `autopilot_reset` answers `failed` ("line not wired"): those belong to the NTRIP and
+autopilot issues. The `status` and `gps` commands are gone (the modem's GNSS is not used; `main/gnss.c` was removed).
+
+- Ack: `{"id","cmd","ok","state":"accepted|done|failed","result"?,"error"?,"message"?,"time"}`; `time` is a number or
+  `null` while the clock is not set. Every command gets one final ack; `ota` first gets `accepted`.
+- **Repeats:** the gateway remembers the last 16 command ids for 3 minutes with their last ack (`main/remote_cmd.c`).
+  The same id again is not run again: the last ack is sent again (`accepted` while the command still runs).
+- Errors: `bad_request`, `unknown_cmd`, `expired`, `no_clock`, `busy` (an update is running; `monitor_*` still work),
+  `failed`, `over_budget` (monitor), and for `ota` `same_version`, `download_failed`, `bad_image`, `bad_size`,
+  `low_signal`, `rolled_back`.
+- `ping` result `{"pong":"<name>"}`. `restart` acks `done`, then restarts after 2 s.
+
+### Metrics, telemetry, data usage, monitor
+
+- Catalogue (`main/metrics.c`, revision 1): `signal.rssi` (key `signal.strength`, dBm), `usage.total.up|down`,
+  `usage.mqtt.up.*` / `usage.mqtt.down.*` (family: one counter per topic), `system.cpu`, `system.core0|1`,
+  `system.memory.free|min_free|largest|pct`, `system.nvs.pct`. The NTRIP (`usage.ntrip.*`) and board-link
+  (`link.*`) metrics join when those exist.
+- `signal.rssi` is read once a minute with PPP paused for 2 to 3 s (the modem answers AT only in command mode), so it
+  offers no monitor rates; every other metric offers 1, 2, 5, 10 samples per second except `system.nvs.pct`.
+- `usage.total.*` count IP packets on the PPP interface (output hook on the lwIP netif, `--wrap=ip4_input` for the
+  receive side, `main/usage.c`); `usage.mqtt.*.<topic>` count whole MQTT PUBLISH packets (fixed header, topic, packet
+  id, payload) per topic, named without `mower/<name>/`.
+- Monitor (`monitor_start` / `monitor_stop`, `gateway/monitor`): budget 100 values per second as the only limit
+  (a start that does not fit is `over_budget`; no cap on the number of streams, each costs one allocation), a metric can be listed once per stream, hold 1 to 60 s (default 10), samples sent every
+  0.2 s (every sample at rates 1, 2, 5), streams end when the server link is lost.
 
 ## Firmware over MQTT
 
-The device downloads a signed `*.bin` as binary chunks on the MQTT connection it already
+The device downloads a signed image as binary chunks on the MQTT connection it already
 has. The file is `<version>.bin` in the server's firmware folder; there is no HTTPS download
-(Caddy's `/fw/` was removed on 2026-11-13). The byte layout, request JSON, error codes and chunk size the server uses today are
-in wiki [Server-App](Server-App#firmware-over-mqtt); the contract is [Mower-Protocol](Mower-Protocol) §12 (same chunk header,
-topics under `gateway/fw/…`). This is what the gateway does today:
+(Caddy's `/fw/` was removed on 2026-11-13). The contract is [Mower-Protocol](Mower-Protocol) §6.5 and §12; the byte layout
+the server uses is in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway does (`main/ota.c`):
 
-1. The `ota` command carries `version` and optional `file` (default `<version>.bin`) and
-   optional `size`. Code: `main/ota.c`, command handling in `main/remote_cmd.c`.
-2. The device publishes one JSON request at a time on `mower/<name>/fw/req`
-   (`request_id`, `op` `chunk`, `file`, `chunk`). QoS 1, not retained.
-3. It subscribes to `mower/<name>/fw/chunk` and `mower/<name>/fw/res` on every connect.
+1. The `ota` command carries `version`, optional `file` (default `<version>.bin`) and optional `size`. The gateway
+   checks it (`bad_request`, `same_version`, `busy`, `low_signal`), acks `accepted` and downloads.
+2. One request at a time on `mower/<name>/gateway/fw/req`: `{"request_id","file","chunk"}`, QoS 1, a **new
+   request id for every request**.
+3. It subscribes `gateway/fw/chunk` and `gateway/fw/res` on every connect.
    A chunk is a 64-byte little-endian header (`RMFW`, version 1, index, count, image size,
-   chunk length, request-id hash, whole-image SHA-256) plus the raw bytes. Info and errors
-   are JSON on `fw/res`.
-4. esp-mqtt `buffer.size` is **8192**, so a default 4096-byte chunk plus the 64-byte header
+   chunk length, request-id hash, whole-image SHA-256) plus up to 4096 bytes. Errors are JSON on `fw/res`.
+4. esp-mqtt `buffer.size` is **8192**, so a chunk plus the 64-byte header
    arrives as one `MQTT_EVENT_DATA`. `on_data` still reassembles a frame that is split
    (`current_data_offset` / `total_data_len`), up to 128 KB.
 5. The device rejects a frame whose magic, version, flags, header length, reserved field or
-   length do not match, or whose request-id hash is not the first 8 bytes of SHA-256 over
-   the request id it sent. It writes the payload with `esp_ota_begin` / `esp_ota_write`.
+   length do not match, whose chunk is longer than 4096 bytes, or whose request-id hash is not the first 8 bytes of
+   SHA-256 over the request id it sent. It writes the payload with `esp_ota_begin` / `esp_ota_write`.
 6. After the app-description bytes are in the slot it checks project name, version (must
    equal the command) and that the version is not the one already running. `size` on the
    command, when set, must equal the image size in the header.
@@ -153,13 +181,38 @@ topics under `gateway/fw/…`). This is what the gateway does today:
    `esp_ota_end` checks the image, which includes the RSA-3072 signature
    (`CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`). Only then
    `esp_ota_set_boot_partition`.
-8. A chunk timeout retries that same chunk (same request id, 4 tries, 45 s each). Bytes
-   already written stay, so the next index resumes the download. A board reset loses that
-   progress; the next `ota` command starts at chunk 0. The running image is unchanged until
+8. **Timeout and retries:** the gateway waits **10 s** for an answer, then asks for the same chunk again with a new
+   request id, up to 5 times in a row. After that, or on a JSON error answer (`not_found`, `bad_request`, `internal`),
+   the update ends with the final ack `download_failed`. Bytes already written stay, so a retry resumes at that chunk.
+   A board reset loses the progress; the next `ota` command starts at chunk 0. The running image is unchanged until
    step 7 succeeds.
-9. When `FIRMWARE_DIR` is unset the server does not subscribe to `fw/req`, so a request gets
-   no answer (`download_failed`). A JSON error `firmware is not configured` is the same fact
-   if a request is still dispatched.
+9. **After the restart:** before it restarts the gateway stores the command id, the target version and the old version
+   in NVS (`ota_id`, `ota_ver`, `ota_prev`). The new image confirms itself once MQTT is up (rollback timer
+   `CONFIG_GATEWAY_OTA_CONFIRM_S`), and when the server link is up it sends the final ack `done` with
+   `{"version","previous","partition"}`; `previous` is also kept in NVS and shows in `gateway/state`. If the new image
+   does not confirm, the old one boots again, sees the stored id and sends the final ack `failed` / `rolled_back`.
+   A resend of the id during that time gets `accepted`.
+10. When `FIRMWARE_DIR` is unset the server does not subscribe to `fw/req`, so a request gets
+    no answer (`download_failed`).
+
+### Verified on the board (2026-11-15, issue 61 build, version string 0.3.0)
+
+Over LTE with the client certificate on 8884, read back from the broker with `tools/mqtt_watch.ps1`:
+`gateway/status` `online`; `gateway/state` (retained) with protocol `0.1`, boot, firmware, `previous` null, partition and
+the operator code; the catalogue (`metrics/signal`, `usage`, `system` of 372, 1313 and 1938 bytes, plus `metrics/index`,
+revision 1); `gateway/telemetry` every 60 s with the signal, `usage.total.*`, the `system.*` values and one
+`usage.mqtt.up.<topic>` / `usage.mqtt.down.<topic>` counter per topic that carried data. `ping` is acked `done`; the same
+id sent again returns the same ack (same `time`). `restart` acks `done` and the board is back in under 45 s with `boot` one higher. An unknown command is `unknown_cmd`, a past `expires_at` is `expired`.
+`monitor_start` streams samples (2 per message at 10/s, 1 at 5/s), `used` in the ack adds up (15, then 95 of 100), a
+stream that does not fit is `over_budget`, the same session with other metrics is `bad_request`, `monitor_stop` ends all.
+`ota` of a version nobody serves: `accepted` at once, `busy` for other commands, the same id repeats `accepted`, and after
+6 requests 10 s apart the final ack `download_failed` (about 60 s).
+
+Not verified: a complete update (no image was served on the new topics), `rolled_back`, the final ack after the restart,
+monitor streams ending after a server outage.
+
+Note for tests: `tools/mqtt_cmd.ps1` and `tools/mqtt_watch.ps1` both log in as `app`, and the broker forces client id
+`app`, so starting one disconnects the other for about 1.5 s (gaps in a watched monitor stream come from that).
 
 ### HTTPS
 

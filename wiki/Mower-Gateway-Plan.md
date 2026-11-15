@@ -41,6 +41,11 @@ has no HTTPS client.
 
 ### Remote commands over MQTT — verified 2026-10-19
 
+> History. Since issue 61 the topics are `mower/<name>/gateway/cmd` and `…/gateway/cmd/ack`, the commands are
+> `ping restart ota monitor_start monitor_stop` and the id memory keeps 16 ids for 3 minutes and repeats the last ack:
+> see [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract). `status`, `gps` (and `main/gnss.c`) are gone.
+> The text below is how it was when it was rehearsed.
+
 The device subscribes `mower/probe-device/cmd` (QoS 1) and answers on
 `mower/probe-device/cmd/ack`: the planned mower command path, rehearsed. Code: `main/remote_cmd.c`;
 PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_rr`).
@@ -144,7 +149,7 @@ MQTT client settings to start with:
 - `broker.address.uri = "mqtts://mqtt.rmx.lt:8884"`, `broker.verification.crt_bundle_attach = esp_crt_bundle_attach`
   (or `certificate = <isrg-root-x1+x2 PEM>` to trust only those roots)
 - `credentials.username` = certificate CN, `authentication.certificate/key` from NVS, no password; client id is forced to the username by the broker
-- `session.keepalive = 60`, `session.last_will` → `mower/<name>/status` (`mower-01` owns `mower/mower-01/#`)
+- `session.keepalive = 60` (15 since issue 61, clean session), `session.last_will` → `mower/<name>/status` (`mower-01` owns `mower/mower-01/#`)
 - `buffer.size = 8192` so one firmware chunk fits; `buffer.out_size = 2048`
 - QoS 1 for status, commands and firmware requests
 

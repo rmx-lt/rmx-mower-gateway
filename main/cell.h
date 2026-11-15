@@ -18,6 +18,14 @@ bool cell_is_up(void);
 /* Signal quality from the last check (99 = unknown). */
 int cell_last_rssi(void);
 
+/* Network code (MCC+MNC, e.g. "24601") of the operator in use; "" before
+ * registration. */
+const char *cell_operator(void);
+
+/* Re-reads the signal quality: takes the modem out of PPP for 2-3 s (see
+ * cell_with_command_mode). Does nothing while PPP is down. */
+void cell_refresh_signal(void);
+
 /* Leaves PPP (modem back in command mode) so the next boot starts clean. */
 void cell_stop(void);
 

@@ -1,10 +1,11 @@
 /*
  * rmx-mower-gateway: LilyGo T-SIM7600 (ESP32 + SIM7600G-H) talking to
- * rmx-server-app over LTE.
+ * rmx-server-app over LTE, on the topics of wiki Mower-Protocol (mower/<name>/gateway/...).
  *
  * board -> cell (PPP) -> MQTT (TLS, client certificate; retained status, last will)
- * -> stay online and run remote commands from mower/<name>/cmd (see remote_cmd.h).
- * Firmware updates arrive as MQTT chunks (main/ota.c).
+ * -> stay online: state, metric catalogue and telemetry (main/metrics.c), remote
+ * commands from gateway/cmd (main/remote_cmd.c). Firmware updates arrive as
+ * MQTT chunks (main/ota.c).
  */
 #include <stdio.h>
 #include <time.h>
@@ -23,7 +24,8 @@
 #include "cell.h"
 #include "creds.h"
 #include "devcert.h"
-#include "gnss.h"
+#include "gwstate.h"
+#include "metrics.h"
 #include "mqtt_link.h"
 #include "ota.h"
 #include "remote_cmd.h"
@@ -39,7 +41,6 @@ static bool connect_mqtt(void)
     }
     ESP_LOGI(TAG, "mqtt connect: PASS");
     ota_confirm();   /* a new image that reaches the broker is good */
-    ota_report_update();
     return true;
 }
 
@@ -54,6 +55,7 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+    gw_boot_init();
     devcert_init();
     devcert_console_start();
     if (!devcert_cn()) {
@@ -85,9 +87,9 @@ void app_main(void)
         ESP_LOGW(TAG, "SNTP: no time yet (commands with expires_at are refused until it syncs)");
     }
 
-    gnss_start();   /* the first fix takes a while: start searching early */
-
     ESP_ERROR_CHECK(remote_cmd_init());
+    ota_resume_pending();
+    metrics_start();   /* state, catalogue, telemetry and monitor streams once the server link is up */
     bool online = connect_mqtt();
     ESP_LOGI(TAG, "STARTUP %s, free heap %u, min %u, internal %u", online ? "OK" : "FAILED",
              (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size(),
@@ -98,7 +100,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(60000));
         if (mqtt_link_wait_ready(0)) {
             ota_confirm();   /* MQTT came up after the first try */
-            ota_report_update();
+            ota_report_result();
         }
         ESP_LOGI(TAG, "alive: ppp %s, rssi %d, free heap %u", cell_is_up() ? "up" : "down",
                  cell_last_rssi(), (unsigned)esp_get_free_heap_size());

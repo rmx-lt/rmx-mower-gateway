@@ -1,4 +1,5 @@
-/* MQTT over TLS to Mosquitto: status, remote commands and firmware chunks. */
+/* MQTT over TLS to Mosquitto: the gateway's topics of wiki Mower-Protocol §3
+ * (mower/<name>/gateway/...), commands, firmware chunks and the server link. */
 #pragma once
 
 #include <stdbool.h>
@@ -6,37 +7,49 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-/* Called on the MQTT task for each message on mower/<user>/cmd. Must not
- * block: hand the work to another task. */
+/* Called on the MQTT task for each message on gateway/cmd. Must not block:
+ * hand the work to another task. */
 typedef void (*mqtt_link_cmd_cb_t)(const char *data, size_t len);
 
 /* Set before mqtt_link_start(). */
 void mqtt_link_set_cmd_handler(mqtt_link_cmd_cb_t cb);
 
-/* Starts the client (auto-reconnect) and subscribes mower/<user>/fw/chunk,
- * mower/<user>/fw/res, mower/status/server and (with a cmd handler)
- * mower/<user>/cmd on every connect. Publishes retained "online" on
- * mower/<user>/status (last will "offline"). The receive buffer is 8192 bytes so a default 4096-byte firmware
+/* Starts the client (clean session, keep-alive 15 s, auto-reconnect). On every
+ * connect it subscribes gateway/cmd, gateway/fw/chunk, gateway/fw/res and
+ * mower/status/server, and publishes retained "online" on gateway/status (last
+ * will "offline"). The receive buffer is 8192 bytes so a 4096-byte firmware
  * chunk (plus its 64-byte header) arrives in one MQTT_EVENT_DATA. */
 esp_err_t mqtt_link_start(void);
 
-/* Firmware messages, after reassembly. chunk is true for fw/chunk (binary)
- * and false for fw/res (JSON). Called on the MQTT task: must not block.
- * NULL stops delivery. */
+/* Firmware messages, after reassembly. chunk is true for gateway/fw/chunk
+ * (binary) and false for gateway/fw/res (JSON). Called on the MQTT task: must
+ * not block. NULL stops delivery. */
 typedef void (*mqtt_link_fw_cb_t)(const uint8_t *data, size_t len, bool chunk);
 
 void mqtt_link_set_fw_handler(mqtt_link_fw_cb_t cb);
 
-/* Publishes a firmware request on mower/<user>/fw/req (QoS 1, not retained). */
+/* Publishes a firmware request on gateway/fw/req (QoS 1, not retained). */
 esp_err_t mqtt_link_publish_fw_req(const char *json);
 
 /* Waits until connected and the firmware topics are subscribed. */
 bool mqtt_link_wait_ready(int timeout_ms);
 
-/* Publishes on mower/<user>/<subtopic> (QoS 1), e.g. "firmware". */
-esp_err_t mqtt_link_publish_own(const char *subtopic, const char *payload, bool retain);
+/* Publishes on mower/<name>/gateway/<subtopic>. len 0 means strlen(payload).
+ * Counted in the per-topic usage counters. */
+esp_err_t mqtt_link_publish(const char *subtopic, const char *payload, int len, int qos, bool retain);
 
-/* Publishes a reply on mower/<user>/cmd/ack (QoS 1). */
+/* Publishes a reply on gateway/cmd/ack (QoS 1). */
 esp_err_t mqtt_link_send_ack(const char *json);
+
+bool mqtt_link_connected(void);
+
+/* The server link of §4.2: MQTT is up and mower/status/server says "online". */
+bool mqtt_link_server_up(void);
+
+/* Call often (every 100 ms): keeps the time the server link has been down. */
+void mqtt_link_update(void);
+
+/* The server link has been down for 10 s without a break (§4.2). */
+bool mqtt_link_server_lost(void);
 
 void mqtt_link_stop(void);

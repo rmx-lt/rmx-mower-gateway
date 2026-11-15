@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 #include "esp_modem_api.h"
 #include "board.h"
+#include "usage.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "cell";
@@ -22,6 +23,7 @@ static const char *TAG = "cell";
 static EventGroupHandle_t s_ev;
 static esp_modem_dce_t *s_dce;
 static int s_rssi = 99;
+static char s_operator[8];   /* MCC+MNC of the network in use, "" until registered */
 /* One user of the modem's command channel at a time: redial vs. AT sessions. */
 static SemaphoreHandle_t s_lock;
 
@@ -35,6 +37,7 @@ static void on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
                  IP2STR(&e->ip_info.ip), IP2STR(&e->ip_info.gw), IP2STR(&dns.ip.u_addr.ip4));
         xEventGroupClearBits(s_ev, LOST_IP);
         xEventGroupSetBits(s_ev, GOT_IP);
+        usage_attach_netif(e->esp_netif);   /* a redial makes a new lwIP netif */
         board_led(true);
     } else if (id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGW(TAG, "PPP lost IP");
@@ -82,6 +85,28 @@ static bool wait_registered(int seconds)
     return false;
 }
 
+/* The operator's network code (wiki Mower-Protocol §6.2): AT+COPS in numeric
+ * format answers +COPS: 0,2,"24601",7. Command mode only. */
+static void read_operator_code(void)
+{
+    char out[CONFIG_ESP_MODEM_C_API_STR_MAX] = {0};
+    s_operator[0] = '\0';
+    if (esp_modem_at(s_dce, "AT+COPS=3,2", NULL, 2000) != ESP_OK ||
+            esp_modem_at(s_dce, "AT+COPS?", out, 2000) != ESP_OK) {
+        return;
+    }
+    const char *q = strchr(out, '"');
+    if (!q) {
+        return;
+    }
+    size_t n = 0;
+    for (q++; q[n] >= '0' && q[n] <= '9' && n < sizeof(s_operator) - 1; n++) {
+        s_operator[n] = q[n];
+    }
+    s_operator[n] = '\0';
+    ESP_LOGI(TAG, "operator code %s", s_operator);
+}
+
 /* Command mode -> registered -> ATD; waits for the IP. */
 static esp_err_t dial(int timeout_ms)
 {
@@ -98,6 +123,7 @@ static esp_err_t dial(int timeout_ms)
     int act = 0;
     esp_modem_get_operator_name(s_dce, op, &act);
     ESP_LOGI(TAG, "registered: operator \"%s\" act %d, rssi %d", op, act, s_rssi);
+    read_operator_code();
 
     int64_t t0 = esp_timer_get_time();
     xEventGroupClearBits(s_ev, GOT_IP | LOST_IP);
@@ -192,6 +218,22 @@ bool cell_is_up(void)
 int cell_last_rssi(void)
 {
     return s_rssi;
+}
+
+const char *cell_operator(void)
+{
+    return s_operator;
+}
+
+static esp_err_t nothing(void *ctx)
+{
+    return ESP_OK;
+}
+
+void cell_refresh_signal(void)
+{
+    /* cell_with_command_mode() reads the signal quality while it is out of PPP */
+    cell_with_command_mode(nothing, NULL, 5000);
 }
 
 void cell_stop(void)
