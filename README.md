@@ -38,9 +38,9 @@ included (a new key needs a new certificate).
 ## Layout
 
 ```
-main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, gnss, ota
+main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, ota, metrics, usage
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
-             mqtt_cmd.ps1 (remote commands), release.ps1 (signed OTA release),
+             mqtt_cmd.ps1 (remote commands), mqtt_watch.ps1 (read the gateway topics), release.ps1 (signed OTA release),
              provision_cert.ps1 + cert_serial.py (client certificate provisioning)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release
 certs/       ISRG Root X1/X2 PEMs (public CA roots for rmx.lt's Let's Encrypt chain)
