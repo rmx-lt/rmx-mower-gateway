@@ -11,7 +11,7 @@ Command prefixes (in this order):
   expect=<text>|   wait until <text> appears (e.g. a URC like +CCHOPEN:) instead of OK
   raw:             send the bytes as-is, no CR added; \\r \\n \\x1a escapes are decoded
   rawfile:<path>   send a file as-is (e.g. a PEM after AT+CCERTDOWN)
-Example: 'wait=60000:expect=+CCHOPEN:|AT+CCHOPEN=0,"api.rmx.lt",443,2'
+Example: 'wait=60000:expect=+CCHOPEN:|AT+CCHOPEN=0,"app.rmx.lt",443,2'
 Use the IDF venv python (it has pyserial):
   C:\\Espressif\\tools\\python\\v6.1\\venv\\Scripts\\python.exe -I -u tools/at_session.py ...
 """

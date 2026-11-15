@@ -6,7 +6,8 @@
 - `tools/at_bridge` boot log: PSRAM; AT session (`tools/at_session.py`): modem identity,
   firmware, SIM, registration, TLS tests (`AT+CCH*`), negative CA test.
 - `tools/ppp_smoke`: PPP, HTTPS, MQTTS results (3 runs incl. reset during PPP).
-- `openssl s_client` from the PC against `api.rmx.lt:443` and `mqtt.rmx.lt:8883`: chain, TLS 1.2 cipher.
+- `openssl s_client` from the PC against `api.rmx.lt:443` (the HTTPS host then; now
+  `app.rmx.lt:443`) and `mqtt.rmx.lt:8883`: chain, TLS 1.2 cipher.
 
 ## Local repositories
 

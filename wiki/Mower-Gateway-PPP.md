@@ -15,6 +15,9 @@ The modem's own TLS (02, option B) works too but is a fallback.
 
 ## Verified result (2026-10-19, 3 runs)
 
+The log is from that day: the HTTPS check then went to `api.rmx.lt/probe/health`, a host and
+path that no longer exist. `tools/ppp_smoke` now gets `https://app.rmx.lt/health`.
+
 ```
 module SIMCOM_SIM7600G-H, rssi 19..31
 PPP up: ip 10.57.66.246 gw 10.64.64.64 dns 83.181.60.98      (connect ~160 ms after ATD)
