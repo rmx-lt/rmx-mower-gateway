@@ -11,7 +11,7 @@ param(
     [switch]$Send,
     [switch]$BuildOnly,
     [string]$Device = 'mower-01',
-    [string]$RemoteDir = '/opt/rmx-vps/services/app/firmware'
+    [string]$RemoteDir = '/opt/rmx-vps/services/app/firmware/gateway'
 )
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $PSScriptRoot '..' | Resolve-Path
