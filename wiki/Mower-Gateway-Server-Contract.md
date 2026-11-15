@@ -85,18 +85,14 @@ P-256 key connects; the device certificate alone is refused ("unknown ca"), so t
   A PUBLISH to a forbidden topic is silently dropped (MQTT 3.1.1).
 - Bad login → CONNACK 5 "not authorized" (verified from the device).
 
-### Planned mower topics (architecture, not implemented by any server yet)
+### Mower topics: the contract
 
-| Topic | Direction | Notes |
-|---|---|---|
-| `mower/<id>/telemetry` | mower → server | |
-| `mower/<id>/status` | mower → server, retained | also the Last Will (`offline`) |
-| `mower/<id>/cmd` | server → mower | command with ID and expiry |
-| `mower/<id>/cmd/ack` | mower → server | |
+The contract between the mower and the server is wiki [Mower-Protocol](Mower-Protocol): every topic names its
+source (`mower/<name>/gateway/…`, `mower/<name>/autopilot/…`), the gateway relays the autopilot's messages without
+reading them, and it runs the NTRIP client and the link to the autopilot board. The firmware does not implement it yet
+([blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6)); the rest of this page is what it does today.
 
-Safety: the mower stops on its own when the link or acks are lost; never rely on the server.
-
-The gateway uses `mower/<name>/cmd` → `…/cmd/ack` and `…/status`
+Today the gateway uses `mower/<name>/cmd` → `…/cmd/ack` and `…/status`
 (format in [06](Mower-Gateway-Plan), "Remote commands").
 
 ## rmx-server-app protocol (what the gateway uses)
@@ -121,7 +117,8 @@ The records feature (a CRUD demo on a `records` table: `create`/`list`/`update`/
   are reserved (shared topics). The device subscribes `fw/chunk`, `fw/res`, `cmd` and `mower/status/server` on every connect
   (the shared one is covered by `pattern read mower/status/server`, the others by `pattern readwrite mower/%u/#`).
 - The device no longer subscribes `mower/<name>/res` or `mower/events/records`, and publishes nothing on `mower/<name>/req`.
-- The wire contract is in wiki [Server-App](Server-App). The server's HTTP and WebSocket parts
+- What the server serves today is in wiki [Server-App](Server-App); the contract both sides move to is
+  [Mower-Protocol](Mower-Protocol). The server's HTTP and WebSocket parts
   are not used by the gateway. The server was renamed (probe naming dropped,
   [PR 60](https://github.com/rmx-lt/rmx-server-app/pull/60)); the VPS still runs the old build until
   [rmx-server-infra#85](https://github.com/rmx-lt/rmx-server-infra/issues/85), which does not matter for the firmware: the
@@ -131,8 +128,9 @@ The records feature (a CRUD demo on a `records` table: `create`/`list`/`update`/
 
 The device downloads a signed `*.bin` as binary chunks on the MQTT connection it already
 has. The file is `<version>.bin` in the server's firmware folder; there is no HTTPS download
-(Caddy's `/fw/` was removed on 2026-11-13). The byte layout, request JSON, error codes and chunk size are the contract
-in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway does with it:
+(Caddy's `/fw/` was removed on 2026-11-13). The byte layout, request JSON, error codes and chunk size the server uses today are
+in wiki [Server-App](Server-App#firmware-over-mqtt); the contract is [Mower-Protocol](Mower-Protocol) §12 (same chunk header,
+topics under `gateway/fw/…`). This is what the gateway does today:
 
 1. The `ota` command carries `version` and optional `file` (default `<version>.bin`) and
    optional `size`. Code: `main/ota.c`, command handling in `main/remote_cmd.c`.
