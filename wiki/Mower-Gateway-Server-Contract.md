@@ -150,8 +150,8 @@ autopilot issues. The `status` and `gps` commands are gone (the modem's GNSS is 
 - `usage.total.*` count IP packets on the PPP interface (output hook on the lwIP netif, `--wrap=ip4_input` for the
   receive side, `main/usage.c`); `usage.mqtt.*.<topic>` count whole MQTT PUBLISH packets (fixed header, topic, packet
   id, payload) per topic, named without `mower/<name>/`.
-- Monitor (`monitor_start` / `monitor_stop`, `gateway/monitor`): budget 100 values per second, at most 8 streams
-  (more is `over_budget`), a metric can be listed once per stream, hold 1 to 60 s (default 10), samples sent every
+- Monitor (`monitor_start` / `monitor_stop`, `gateway/monitor`): budget 100 values per second as the only limit
+  (a start that does not fit is `over_budget`; no cap on the number of streams, each costs one allocation), a metric can be listed once per stream, hold 1 to 60 s (default 10), samples sent every
   0.2 s (every sample at rates 1, 2, 5), streams end when the server link is lost.
 
 ## Firmware over MQTT

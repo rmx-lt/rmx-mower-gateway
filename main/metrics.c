@@ -23,7 +23,6 @@ static const char *TAG = "metrics";
 
 #define TICK_MS            100
 #define MONITOR_BUDGET     100    /* values per second, wiki Mower-Protocol §15 */
-#define MON_MAX_STREAMS    8
 #define MON_MAX_METRICS    16
 #define MON_BATCH          4
 #define MON_FLUSH_US       200000
@@ -427,8 +426,8 @@ static void telemetry_poll(int64_t now)
 
 /* ------------------------------------------------------------------ monitor */
 
-typedef struct {
-    bool used;
+typedef struct stream {
+    struct stream *next;
     char session[65];
     int n;
     mref_t ref[MON_MAX_METRICS];
@@ -444,25 +443,28 @@ typedef struct {
     double vals[MON_BATCH][MON_MAX_METRICS];
 } stream_t;
 
-static stream_t s_streams[MON_MAX_STREAMS];
+/* Running streams. There is no fixed number of them: the budget is the only limit
+ * (wiki Mower-Protocol §15); a stream costs one allocation. */
+static stream_t *s_streams;
 static SemaphoreHandle_t s_mon_lock;
 
-static void stream_free(stream_t *s)
+/* Unlinks and frees the stream that *link points to; *link then points to the next. */
+static void stream_remove(stream_t **link)
 {
+    stream_t *s = *link;
+    *link = s->next;
     for (int i = 0; i < s->n; i++) {
         free(s->names[i]);
     }
-    memset(s, 0, sizeof(*s));
+    free(s);
 }
 
 /* Caller holds s_mon_lock. */
 static int budget_used(void)
 {
     int used = 0;
-    for (int i = 0; i < MON_MAX_STREAMS; i++) {
-        if (s_streams[i].used) {
-            used += s_streams[i].n * s_streams[i].rate;
-        }
+    for (const stream_t *s = s_streams; s; s = s->next) {
+        used += s->n * s->rate;
     }
     return used;
 }
@@ -538,14 +540,9 @@ bool monitor_start(const cJSON *cmd, cJSON *result, const char **error, const ch
         if (names_ok && !rate_ok) {
             *message = "a metric asked for does not offer this rate (1, 2, 5 or 10)";
         } else if (names_ok) {
-            stream_t *s = NULL;
-            stream_t *freeslot = NULL;
-            for (int k = 0; k < MON_MAX_STREAMS; k++) {
-                if (s_streams[k].used && strcmp(s_streams[k].session, session) == 0) {
-                    s = &s_streams[k];
-                } else if (!s_streams[k].used && !freeslot) {
-                    freeslot = &s_streams[k];
-                }
+            stream_t *s = s_streams;
+            while (s && strcmp(s->session, session) != 0) {
+                s = s->next;
             }
             int64_t now = esp_timer_get_time();
             if (s) {
@@ -559,25 +556,27 @@ bool monitor_start(const cJSON *cmd, cJSON *result, const char **error, const ch
                     s->deadline_us = now + (int64_t)(hold * 1e6);   /* extends it, the sample index goes on */
                     ok = true;
                 }
-            } else if (!freeslot || budget_used() + n * rate > MONITOR_BUDGET) {
+            } else if (budget_used() + n * rate > MONITOR_BUDGET) {
                 *error = "over_budget";
-                *message = freeslot ? "the stream does not fit the budget of 100 values per second"
-                                    : "too many streams are running";
+                *message = "the stream does not fit the budget of 100 values per second";
+            } else if (!(s = calloc(1, sizeof(*s)))) {
+                *error = "failed";
+                *message = "out of memory";
             } else {
-                memset(freeslot, 0, sizeof(*freeslot));
-                freeslot->used = true;
-                snprintf(freeslot->session, sizeof(freeslot->session), "%s", session);
-                freeslot->n = n;
+                snprintf(s->session, sizeof(s->session), "%s", session);
+                s->n = n;
                 int k = 0;
                 cJSON_ArrayForEach(it, names) {
-                    freeslot->names[k] = strdup(cJSON_GetStringValue(it));
-                    freeslot->ref[k] = refs[k];
+                    s->names[k] = strdup(cJSON_GetStringValue(it));
+                    s->ref[k] = refs[k];
                     k++;
                 }
-                freeslot->rate = rate;
-                freeslot->period_us = 1000000 / rate;
-                freeslot->next_us = now;
-                freeslot->deadline_us = now + (int64_t)(hold * 1e6);
+                s->rate = rate;
+                s->period_us = 1000000 / rate;
+                s->next_us = now;
+                s->deadline_us = now + (int64_t)(hold * 1e6);
+                s->next = s_streams;
+                s_streams = s;
                 ok = true;
                 ESP_LOGI(TAG, "monitor %s: %d metrics at %d/s for %.0f s", session, n, rate, hold);
             }
@@ -592,10 +591,13 @@ void monitor_stop(const cJSON *cmd, cJSON *result)
 {
     const char *session = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "session"));
     xSemaphoreTake(s_mon_lock, portMAX_DELAY);
-    for (int i = 0; i < MON_MAX_STREAMS; i++) {
-        if (s_streams[i].used && (!session || strcmp(s_streams[i].session, session) == 0)) {
-            ESP_LOGI(TAG, "monitor %s stopped", s_streams[i].session);
-            stream_free(&s_streams[i]);
+    stream_t **link = &s_streams;
+    while (*link) {
+        if (!session || strcmp((*link)->session, session) == 0) {
+            ESP_LOGI(TAG, "monitor %s stopped", (*link)->session);
+            stream_remove(link);
+        } else {
+            link = &(*link)->next;
         }
     }
     fill_budget(result);
@@ -641,16 +643,14 @@ static void monitor_tick(int64_t now)
 {
     xSemaphoreTake(s_mon_lock, portMAX_DELAY);
     bool lost = mqtt_link_server_lost();
-    for (int i = 0; i < MON_MAX_STREAMS; i++) {
-        stream_t *s = &s_streams[i];
-        if (!s->used) {
-            continue;
-        }
+    for (stream_t **link = &s_streams; *link;) {
+        stream_t *s = *link;
         if (lost || now > s->deadline_us) {
             ESP_LOGI(TAG, "monitor %s ended (%s)", s->session, lost ? "server link lost" : "hold ran out");
-            stream_free(s);
+            stream_remove(link);
             continue;
         }
+        link = &s->next;
         if (!mqtt_link_connected()) {
             s->next_us = now;   /* nothing is kept back for later */
             s->count = 0;

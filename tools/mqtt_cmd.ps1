@@ -5,6 +5,7 @@
 #   tools\mqtt_cmd.ps1 ota -Version 0.4.0 -Size 851234   # file = <version>.bin (tools\release.ps1 uploads it)
 #   tools\mqtt_cmd.ps1 monitor_start -Session m-1 -Metrics usage.total.up,usage.total.down -Rate 2 -Hold 20
 #   tools\mqtt_cmd.ps1 monitor_stop -Session m-1
+#   tools\mqtt_cmd.ps1 monitor_start -Session m -Count 12 -Metrics system.cpu -Rate 1   # 12 streams m-1 .. m-12
 #   tools\mqtt_cmd.ps1 ping -Id c-test1 -Repeat 1     # same id again: the gateway repeats the same ack
 #
 # Publishes {"id","cmd",...,"expires_at"} on mower/<device>/gateway/cmd as the MQTT login "app"
@@ -24,6 +25,7 @@ param(
     [int]$Rate = 0,           # monitor_start: samples per second
     [int]$Hold = 0,           # monitor_start: seconds without extension (0 = the gateway's default)
     [string]$Id,              # command id (default: a new one)
+    [int]$Count = 0,          # monitor_start: start this many streams, <Session>-1 .. <Session>-N, one command each
     [int]$Repeat = 0,         # send the same command (same id) this many more times
     [int]$TtlS = 60,          # expires_at = now + TtlS (0 = no expiry, negative = already expired, for tests)
     [int]$TimeoutS = 45,
@@ -68,7 +70,15 @@ if ($TtlS -ne 0) { $msg.expires_at = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(
 $json = $msg | ConvertTo-Json -Compress -Depth 4
 
 $last = 0
-for ($n = 0; $n -le $Repeat; $n++) {
+$sends = if ($Count -gt 1) { $Count - 1 } else { $Repeat }
+for ($n = 0; $n -le $sends; $n++) {
+    if ($Count -gt 1) {
+        $Id = 'pc-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+        $msg.id = $Id
+        $msg.session = "$Session-$($n + 1)"
+        if ($TtlS -ne 0) { $msg.expires_at = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + $TtlS }
+        $json = $msg | ConvertTo-Json -Compress -Depth 4
+    }
     $out = New-TemporaryFile; $err = New-TemporaryFile
     # mosquitto_rr has no -f; pass the JSON with -m, quotes escaped for the Windows command line
     $a = @('-h', 'mqtt.rmx.lt', '-p', '8883', '--cafile', "`"$ca`"", '-V', '5', '-q', '1',
