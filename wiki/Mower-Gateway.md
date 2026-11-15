@@ -18,6 +18,14 @@ the metric catalogue `gateway/metrics/…`, `gateway/telemetry` (signal, system,
 `gateway/cmd` with acks on `gateway/cmd/ack`, monitor streams on `gateway/monitor`. A new image is requested as MQTT
 chunks on `gateway/fw/req` and written from `gateway/fw/chunk`. Clean session, keep-alive 15 s. The firmware has no HTTPS
 client. The NTRIP client and the link to the autopilot board are not in the firmware yet (other issues).
+Verified 2026-11-15 on the board over LTE against the deployed server ([issue 65](https://github.com/rmx-lt/rmx-mower-gateway/issues/65)),
+commands sent through the server's API:
+an `ota` from 0.3.0 to 0.4.0 (749568 bytes) downloaded over `gateway/fw`, restarted into `ota_1` and sent the final `done`
+ack with the same command id 2 minutes after the command;
+an image built with an unreachable broker port did not confirm, 0.4.0 booted again and the command ended `failed` with
+`rolled_back` 7 minutes after the command (300 s confirm time);
+a monitor stream with `hold` 60 stopped 10 s after `mower/status/server` went `offline` and did not start again when the
+server came back 24 s later.
 Older text below that names the unprefixed topics (`mower/<name>/status`, `cmd`, `fw/…`) describes firmware up to 0.3.x. Verified 2026-11-10: a USB flash of 0.3.0 passed the MQTT self-test, an unknown
 file returned `not_found` and left 0.3.0 running, and `ota` of `0.3.1.bin` (729088 bytes,
 178 chunks) wrote the image, matched the chunk-header SHA-256, rebooted into `ota_1`, and
