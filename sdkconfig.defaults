@@ -19,7 +19,7 @@ CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=4096
 CONFIG_COMPILER_CXX_EXCEPTIONS=y
 # TLS: trust only ISRG Root X1 + X2 (rmx.lt's Let's Encrypt chain), not the
 # whole Mozilla bundle: a CA whose keys leak (eMudhra/emSign, Oct 2026) could
-# otherwise issue a fake mqtt.rmx.lt / api.rmx.lt that the device accepts.
+# otherwise issue a fake mqtt.rmx.lt / app.rmx.lt that the device accepts.
 # Path is relative to the project directory.
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_NONE=y

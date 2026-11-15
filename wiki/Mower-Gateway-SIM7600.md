@@ -64,11 +64,14 @@ found only one weak foreign GSM cell.
 
 ### B. Modem TLS — verified commands (2026-10-19, firmware B04)
 
-Socket service, CA upload, verified TLS 1.2 to `api.rmx.lt:443` and `mqtt.rmx.lt:8883`:
+Socket service, CA upload, verified TLS 1.2 to the HTTPS host (port 443) and `mqtt.rmx.lt:8883`. The run on 2026-10-19
+used `api.rmx.lt` and `GET /probe/health` (67 bytes), both removed since. The commands below
+name today's host, `app.rmx.lt`; the request `GET /health HTTP/1.1`, `Host: app.rmx.lt`,
+`Connection: close` is 61 bytes. Not re-run with the new name:
 
 ```
 AT+NETOPEN                                  → OK, +NETOPEN: 0   (PDP up; AT+IPADDR shows IP)
-AT+CDNSGIP="api.rmx.lt"                     → +CDNSGIP: 1,"api.rmx.lt","45.81.252.43"
+AT+CDNSGIP="app.rmx.lt"                     → +CDNSGIP: 1,"app.rmx.lt","45.81.252.43"
 AT+CCERTDOWN="isrgx1.pem",1935              → >   then send the PEM bytes (exact length) → OK
 AT+CCERTLIST                                → +CCERTLIST: "isrgx1.pem"
 AT+CCHSTART                                 → +CCHSTART: 0
@@ -78,8 +81,8 @@ AT+CSSLCFG="ignorelocaltime",0,1            (1 = don't check validity dates)
 AT+CSSLCFG="enableSNI",0,1                  (REQUIRED for Caddy virtual hosts; default 0)
 AT+CSSLCFG="cacert",0,"isrgx1.pem"
 AT+CCHSSLCFG=0,0                            (session 0 uses SSL context 0)
-AT+CCHOPEN=0,"api.rmx.lt",443,2             → OK, +CCHOPEN: 0,0    (2 = TLS)
-AT+CCHSEND=0,67                             → >   then exactly 67 bytes of HTTP request
+AT+CCHOPEN=0,"app.rmx.lt",443,2             → OK, +CCHOPEN: 0,0    (2 = TLS)
+AT+CCHSEND=0,61                             → >   then exactly 61 bytes of HTTP request
                                             → +CCHRECV: DATA,0,198 … HTTP/1.1 200 OK … {"status":"ok",…}
                                             → +CCH_PEER_CLOSED: 0
 AT+CCHCLOSE=0 / AT+CCHSTOP

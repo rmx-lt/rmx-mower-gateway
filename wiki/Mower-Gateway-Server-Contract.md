@@ -9,22 +9,24 @@ Re-read those before coding: they are the source of truth and may have changed.
 
 | Endpoint | What | TLS |
 |---|---|---|
-| `https://rmx.lt/app/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
+| `https://app.rmx.lt/…` | rmx-server-app REST (Go behind Caddy) | Caddy, Let's Encrypt, TLS 1.2/1.3, HTTP/1.1 + h2 |
 | `mqtts://mqtt.rmx.lt:8883` | Mosquitto 2.1, MQTT 3.1.1/5 over TLS (min TLS 1.2) | LE cert copied from Caddy |
 
 Browsers do not speak MQTT. `https://mqtt.rmx.lt` only tells clients to use `mqtts://mqtt.rmx.lt:8883`.
 
-- VPS `45.81.252.43` (`api`, `mqtt` are CNAMEs to `rmx.lt`). IPv4 only.
+- VPS `45.81.252.43` (`app`, `mqtt` are CNAMEs to `rmx.lt`). IPv4 only.
 - rmx-server-app runs always on the VPS (since 2026-11-14; before that the probe at `/probe/…`, off by default).
-  `GET /app/health` → `200 {"status":"ok","db":true,"mqtt":true,"version":"0.1.0"}` (checked 2026-11-14).
+  `GET /health` → `200 {"status":"ok","db":true,"mqtt":true,"version":"0.1.0"}` (answer checked 2026-11-14,
+  before the move to `app.rmx.lt` on 2026-11-15).
 - Mosquitto on 8883 runs always.
 
 ## TLS certificate chain (checked 2026-10-19 with openssl)
 
-Both hosts serve Let's Encrypt's new **Gen-Y ECDSA** chain:
+Both hosts serve Let's Encrypt's new **Gen-Y ECDSA** chain. The HTTPS host checked that day
+was `api.rmx.lt` (removed 2026-11-15); `app.rmx.lt` gets its own leaf from the same issuer:
 
 ```
-CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-01-13 (90 days, auto-renewed)
+CN=<HTTPS host> / CN=mqtt.rmx.lt   ECDSA P-256 leaf, valid 2026-10-15 … 2027-01-13 (90 days, auto-renewed)
   └ CN=YE2 / CN=YE1 (Let's Encrypt) ECDSA P-384, to 2028-09-02
     └ CN=Root YE (ISRG)             ECDSA P-384, cross-signed by
       └ ISRG Root X2                ECDSA P-384, cross-signed by
@@ -47,7 +49,7 @@ CN=api.rmx.lt / CN=mqtt.rmx.lt     ECDSA P-256 leaf, valid 2026-10-15 … 2027-0
 - Don't pin the leaf or the intermediate (they rotate every ~60–90 days). Pin roots only.
 - Let's Encrypt chains change (they did in 2025–26); keep both roots, re-check with
   `openssl s_client -connect mqtt.rmx.lt:8883 -servername mqtt.rmx.lt -showcerts`.
-- **SNI is required** for `api.rmx.lt` (Caddy serves several names on one IP). mbedTLS sends
+- **SNI is required** for `app.rmx.lt` (Caddy serves several names on one IP). mbedTLS sends
   it automatically; the modem needs `AT+CSSLCFG="enableSNI",0,1`.
 
 ## Client certificate listener (port 8884)
@@ -163,6 +165,6 @@ in wiki [Server-App](Server-App#firmware-over-mqtt). This is what the gateway do
 
 ### HTTPS
 
-Browsers use the server's HTTP API (wiki [Server-App](Server-App), under `/app/`). The gateway
-firmware does not. `tools/ppp_smoke` still does one GET `/app/health` as a pipe check.
+Browsers use the server's HTTP API (wiki [Server-App](Server-App), at `https://app.rmx.lt/`). The gateway
+firmware does not. `tools/ppp_smoke` still does one GET `https://app.rmx.lt/health` as a pipe check.
 NVS holds no web or firmware-download password.
