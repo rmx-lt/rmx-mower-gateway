@@ -16,7 +16,9 @@
 #include "esp_timer.h"
 #include "psa/crypto.h"
 #include "cell.h"
+#include "gwstate.h"
 #include "mqtt_link.h"
+#include "remote_cmd.h"
 #include "esp_random.h"
 #include "sdkconfig.h"
 
@@ -26,7 +28,7 @@ static const char *TAG = "ota";
 /* Project name of images built before the rename; one of them may update to this project. */
 #define LEGACY_PROJECT_NAME "rmx_mower_modem_probe"
 
-/* A unique request id for one firmware request ("dev-<boot>-<n>"). */
+/* A new request id for every firmware request ("dev-<random>-<n>", wiki Mower-Protocol §12.1). */
 static void new_request_id(char buf[REQUEST_ID_LEN + 1])
 {
     static uint32_t boot_tag;
@@ -37,12 +39,13 @@ static void new_request_id(char buf[REQUEST_ID_LEN + 1])
     snprintf(buf, REQUEST_ID_LEN + 1, "dev-%08lx-%lu", (unsigned long)boot_tag, (unsigned long)++counter);
 }
 
-/* wiki Mower-Gateway-Server-Contract, "Firmware over MQTT": the frame is the
- * contract in rmx-server-app (Server-App, "Firmware over MQTT"). One request
- * is in flight. A dropped link retries the same chunk; bytes already written
- * with esp_ota_write stay, so the next try resumes at the next index. */
-#define CHUNK_TRIES     4
-#define CHUNK_WAIT_MS   45000
+/* Chunk transfer, wiki Mower-Protocol §12: one request open at a time; the
+ * board waits 10 s for the answer, then asks for the same chunk again with a
+ * new request id, up to 5 times in a row, then the download has failed. Bytes
+ * already written with esp_ota_write stay, so a retry resumes at that chunk. */
+#define CHUNK_TRIES     6   /* the request and 5 repeats */
+#define CHUNK_WAIT_MS   10000
+#define CHUNK_MAX       4096
 #define ID_LEN          64
 #define FILE_LEN        128
 #define VERSION_LEN     32
@@ -86,52 +89,18 @@ static volatile bool s_listen;
 static QueueHandle_t s_rxq;
 static esp_timer_handle_t s_confirm_timer;
 static bool s_pending_verify;
-static bool s_report_pending;
-
-static const char *volatile s_state = "idle";
-static char s_target[VERSION_LEN];
 static volatile int s_progress = -1;
-static char s_error[32];
 
-static bool clock_valid(void)
-{
-    return time(NULL) > 1700000000;
-}
+/* NVS "gw": the open ota command across the restart (§6.5, steps 2 to 4). */
+#define NVS_OTA_ID   "ota_id"
+#define NVS_OTA_VER  "ota_ver"    /* the version the command installs */
+#define NVS_OTA_PREV "ota_prev"   /* the version that ran before */
 
-static void send_ack(const char *state, const char *error, const char *message, int64_t t0)
-{
-    cJSON *reply = cJSON_CreateObject();
-    cJSON_AddStringToObject(reply, "id", s_req.id);
-    cJSON_AddStringToObject(reply, "cmd", "ota");
-    if (error) {
-        cJSON_AddBoolToObject(reply, "ok", false);
-        cJSON_AddStringToObject(reply, "error", error);
-        cJSON_AddStringToObject(reply, "message", message);
-    } else {
-        cJSON_AddBoolToObject(reply, "ok", true);
-        cJSON *res = cJSON_AddObjectToObject(reply, "result");
-        cJSON_AddStringToObject(res, "state", state);
-        cJSON_AddStringToObject(res, "version", s_req.version);
-        cJSON_AddStringToObject(res, "from", esp_app_get_description()->version);
-    }
-    cJSON_AddNumberToObject(reply, "ms", (double)((esp_timer_get_time() - t0) / 1000));
-    if (clock_valid()) {
-        cJSON_AddNumberToObject(reply, "time", (double)time(NULL));
-    }
-    char *json = cJSON_PrintUnformatted(reply);
-    if (json) {
-        mqtt_link_send_ack(json);
-        free(json);
-    }
-    cJSON_Delete(reply);
-}
-
-static void fail(const char *error, const char *message, int64_t t0)
+/* Final ack "failed": the update ends here, the old image keeps running. */
+static void fail(const char *error, const char *message)
 {
     ESP_LOGE(TAG, "update to %s failed: %s (%s)", s_req.version, error, message);
-    snprintf(s_error, sizeof(s_error), "%s", error);
-    s_state = "failed";
-    send_ack(NULL, error, message, t0);
+    cmd_ack(s_req.id, "ota", "failed", error, message, NULL);
 }
 
 static void on_fw(const uint8_t *data, size_t len, bool chunk)
@@ -211,7 +180,7 @@ static bool parse_frame(const uint8_t *data, size_t len, const uint8_t expect_ha
             hdr->header_len != FW_HDR_LEN || hdr->reserved != 0) {
         return false;
     }
-    if (len != FW_HDR_LEN + (size_t)hdr->chunk_len) {
+    if (len != FW_HDR_LEN + (size_t)hdr->chunk_len || hdr->chunk_len > CHUNK_MAX) {
         return false;
     }
     if (memcmp(hdr->request_id_hash, expect_hash, 8) != 0) {
@@ -293,28 +262,26 @@ static bool link_up(int attempt)
     return cell_wait_ip(120000) && mqtt_link_wait_ready(90000);
 }
 
-static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len, int64_t t0)
+static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len)
 {
-    char rid[REQUEST_ID_LEN + 1];
-    new_request_id(rid);
-    uint8_t expect[8];
-    if (!sha256_id(rid, expect)) {
-        fail("failed", "could not hash the firmware request id", t0);
-        return false;
-    }
-    char body[FILE_LEN + 96];
-    snprintf(body, sizeof(body),
-             "{\"request_id\":\"%s\",\"op\":\"chunk\",\"file\":\"%s\",\"chunk\":%lu}",
-             rid, s_req.file, (unsigned long)index);
-
     for (int attempt = 0; attempt < CHUNK_TRIES; attempt++) {
         if (attempt > 0) {
-            ESP_LOGW(TAG, "chunk %lu retry %d/%d", (unsigned long)index, attempt, CHUNK_TRIES - 1);
-            vTaskDelay(pdMS_TO_TICKS(2000 * attempt));
+            ESP_LOGW(TAG, "chunk %lu: no answer, asking again (%d/%d)", (unsigned long)index,
+                     attempt, CHUNK_TRIES - 1);
         }
         if (!link_up(attempt)) {
             continue;
         }
+        char rid[REQUEST_ID_LEN + 1];
+        new_request_id(rid);   /* a new id for every request */
+        uint8_t expect[8];
+        if (!sha256_id(rid, expect)) {
+            fail("failed", "could not hash the firmware request id");
+            return false;
+        }
+        char body[FILE_LEN + 80];
+        snprintf(body, sizeof(body), "{\"request_id\":\"%s\",\"file\":\"%s\",\"chunk\":%lu}",
+                 rid, s_req.file, (unsigned long)index);
         if (mqtt_link_publish_fw_req(body) != ESP_OK) {
             continue;
         }
@@ -326,42 +293,38 @@ static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len, int6
             return true;
         }
         if (kind == RX_SERVER) {
-            /* Stable machine code from the server. "firmware is not configured"
-             * means FIRMWARE_DIR is unset: retrying will not help. */
-            const char *use = code;
-            if (strcmp(code, "bad_request") != 0 && strcmp(code, "not_found") != 0 &&
-                    strcmp(code, "internal") != 0) {
-                use = "failed";
-            }
-            fail(use, message, t0);
+            /* An error answer ends the download (§12.4). */
+            char text[160];
+            snprintf(text, sizeof(text), "the server answered %s: %s", code, message);
+            fail("download_failed", text);
             return false;
         }
     }
-    fail("download_failed", "no firmware chunk (the link dropped or firmware is not served)", t0);
+    fail("download_failed", "no firmware chunk (the link dropped or firmware is not served)");
     return false;
 }
 
-static bool check_desc(const esp_partition_t *part, int64_t t0)
+static bool check_desc(const esp_partition_t *part)
 {
     esp_app_desc_t desc;
     const esp_app_desc_t *running = esp_app_get_description();
     if (esp_ota_get_partition_description(part, &desc) != ESP_OK) {
-        fail("bad_image", "could not read the image header", t0);
+        fail("bad_image", "could not read the image header");
         return false;
     }
     ESP_LOGI(TAG, "image: %s %s (IDF %s)", desc.project_name, desc.version, desc.idf_ver);
     bool renamed = strncmp(running->project_name, LEGACY_PROJECT_NAME, sizeof(desc.project_name)) == 0 &&
                    strncmp(desc.project_name, "rmx_mower_gateway", sizeof(desc.project_name)) == 0;
     if (!renamed && strncmp(desc.project_name, running->project_name, sizeof(desc.project_name)) != 0) {
-        fail("bad_image", "the image is for another project", t0);
+        fail("bad_image", "the image is for another project");
         return false;
     }
     if (strncmp(desc.version, s_req.version, sizeof(desc.version)) != 0) {
-        fail("bad_image", "the image has another version than the command", t0);
+        fail("bad_image", "the image has another version than the command");
         return false;
     }
     if (strncmp(desc.version, running->version, sizeof(desc.version)) == 0) {
-        fail("same_version", "this version is already running", t0);
+        fail("same_version", "this version is already running");
         return false;
     }
     return true;
@@ -374,13 +337,13 @@ static void ota_task(void *arg)
     mqtt_link_set_fw_handler(on_fw);
     drain_rx();
     if (psa_crypto_init() != PSA_SUCCESS) {
-        fail("failed", "crypto init failed", t0);
+        fail("failed", "crypto init failed");
         finish_task();
     }
 
     const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
     if (!part) {
-        fail("failed", "no OTA partition", t0);
+        fail("failed", "no OTA partition");
         finish_task();
     }
 
@@ -398,7 +361,7 @@ static void ota_task(void *arg)
     for (uint32_t index = 0; !have_meta || index < chunk_count; index++) {
         uint8_t *frame = NULL;
         size_t frame_len = 0;
-        if (!fetch_chunk(index, &frame, &frame_len, t0)) {
+        if (!fetch_chunk(index, &frame, &frame_len)) {
             if (handle) {
                 esp_ota_abort(handle);
             }
@@ -413,7 +376,7 @@ static void ota_task(void *arg)
 
         if (hdr.chunk_index != index) {
             free(frame);
-            fail("bad_image", "firmware chunk index does not match the request", t0);
+            fail("bad_image", "firmware chunk index does not match the request");
             if (handle) {
                 esp_ota_abort(handle);
             }
@@ -429,25 +392,25 @@ static void ota_task(void *arg)
             if (image_size == 0 || image_size > part->size || chunk_count == 0 ||
                     chunk_count > (part->size / 256) + 1) {
                 free(frame);
-                fail("bad_size", "firmware image size is not usable", t0);
+                fail("bad_size", "firmware image size is not usable");
                 finish_task();
             }
             if (s_req.size > 0 && (uint32_t)s_req.size != image_size) {
                 free(frame);
                 ESP_LOGE(TAG, "image size %lu, expected %d", (unsigned long)image_size, s_req.size);
-                fail("bad_size", "the image size differs from the command", t0);
+                fail("bad_size", "the image size differs from the command");
                 finish_task();
             }
             if (psa_hash_setup(&sha, PSA_ALG_SHA_256) != PSA_SUCCESS) {
                 free(frame);
-                fail("failed", "could not start the image hash", t0);
+                fail("failed", "could not start the image hash");
                 finish_task();
             }
             sha_open = true;
             if (esp_ota_begin(part, image_size, &handle) != ESP_OK) {
                 free(frame);
                 psa_hash_abort(&sha);
-                fail("failed", "could not start writing the update slot", t0);
+                fail("failed", "could not start writing the update slot");
                 finish_task();
             }
             have_meta = true;
@@ -456,7 +419,7 @@ static void ota_task(void *arg)
             free(frame);
             esp_ota_abort(handle);
             psa_hash_abort(&sha);
-            fail("bad_image", "firmware chunk header changed mid-download", t0);
+            fail("bad_image", "firmware chunk header changed mid-download");
             finish_task();
         }
 
@@ -466,7 +429,7 @@ static void ota_task(void *arg)
                 free(frame);
                 esp_ota_abort(handle);
                 psa_hash_abort(&sha);
-                fail("failed", "writing the update slot failed", t0);
+                fail("failed", "writing the update slot failed");
                 finish_task();
             }
         }
@@ -474,7 +437,7 @@ static void ota_task(void *arg)
         free(frame);
 
         if (!desc_checked && written >= APP_DESC_BYTES) {
-            if (!check_desc(part, t0)) {
+            if (!check_desc(part)) {
                 esp_ota_abort(handle);
                 psa_hash_abort(&sha);
                 finish_task();
@@ -493,13 +456,13 @@ static void ota_task(void *arg)
     if (!desc_checked) {
         esp_ota_abort(handle);
         psa_hash_abort(&sha);
-        fail("bad_image", "image is too small to hold an app header", t0);
+        fail("bad_image", "image is too small to hold an app header");
         finish_task();
     }
     if (written != image_size) {
         esp_ota_abort(handle);
         psa_hash_abort(&sha);
-        fail("bad_size", "the chunks do not add up to the image size", t0);
+        fail("bad_size", "the chunks do not add up to the image size");
         finish_task();
     }
 
@@ -509,7 +472,7 @@ static void ota_task(void *arg)
     sha_open = false;
     if (st != PSA_SUCCESS || got_len != sizeof(expect_sha) || memcmp(got, expect_sha, sizeof(got)) != 0) {
         esp_ota_abort(handle);
-        fail("bad_image", "image SHA-256 does not match the firmware header", t0);
+        fail("bad_image", "image SHA-256 does not match the firmware header");
         finish_task();
     }
     ESP_LOGI(TAG, "image SHA-256 matches the chunk header");
@@ -520,34 +483,38 @@ static void ota_task(void *arg)
     esp_err_t err = esp_ota_end(handle);
     handle = 0;
     if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
-        fail("bad_image", "image check failed (signature or hash, see the device log)", t0);
+        fail("bad_image", "image check failed (signature or hash, see the device log)");
         finish_task();
     }
     if (err != ESP_OK) {
-        fail("failed", esp_err_to_name(err), t0);
+        fail("failed", esp_err_to_name(err));
         finish_task();
     }
     err = esp_ota_set_boot_partition(part);
     if (err != ESP_OK) {
-        fail("failed", esp_err_to_name(err), t0);
+        fail("failed", esp_err_to_name(err));
         finish_task();
     }
 
     ESP_LOGI(TAG, "update to %s written in %lld s", s_req.version, (esp_timer_get_time() - t0) / 1000000);
     s_progress = 100;
-    s_state = "done";
-    send_ack("done", NULL, NULL, t0);
+    /* §6.5 step 2: the command id is kept across the restart. The new image
+     * sends the final ack (done, or rolled_back from the old image). */
+    gw_nvs_set(NVS_OTA_ID, s_req.id);
+    gw_nvs_set(NVS_OTA_VER, s_req.version);
+    gw_nvs_set(NVS_OTA_PREV, esp_app_get_description()->version);
     restart_into_new_image();
     finish_task();
 }
 
+/* A file name is 1-128 characters of [A-Za-z0-9._-], never a path (§12). */
 static bool valid_fw_file(const char *name)
 {
     size_t n = strlen(name);
-    if (n < 5 || n > FILE_LEN || strcmp(name + n - 4, ".bin") != 0) {
+    if (n < 1 || n > FILE_LEN) {
         return false;
     }
-    for (size_t i = 0; i < n - 4; i++) {
+    for (size_t i = 0; i < n; i++) {
         char c = name[i];
         if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
               c == '.' || c == '_' || c == '-')) {
@@ -562,7 +529,7 @@ bool ota_start(const char *cmd_id, const char *file, const char *version, int si
 {
     *error = "bad_request";
     if (!file || !valid_fw_file(file)) {
-        *message = "ota needs a file name [A-Za-z0-9._-]+.bin (or a version, used as <version>.bin)";
+        *message = "file must be 1-128 characters of A-Za-z0-9._-";
         return false;
     }
     if (!version || !version[0] || strlen(version) >= VERSION_LEN) {
@@ -608,13 +575,12 @@ bool ota_start(const char *cmd_id, const char *file, const char *version, int si
     snprintf(s_req.file, sizeof(s_req.file), "%s", file);
     snprintf(s_req.version, sizeof(s_req.version), "%s", version);
     s_req.size = size;
-    snprintf(s_target, sizeof(s_target), "%s", version);
-    s_error[0] = '\0';
     s_progress = 0;
-    s_state = "downloading";
+    /* The "accepted" ack goes out before the task starts, so a failure of the
+     * task cannot overtake it. */
+    cmd_ack(cmd_id, "ota", "accepted", NULL, NULL, NULL);
     if (xTaskCreate(ota_task, "ota", 12288, NULL, 3, NULL) != pdPASS) {
         s_busy = false;
-        s_state = "failed";
         *error = "failed";
         *message = "no memory for the update task";
         return false;
@@ -661,6 +627,15 @@ void ota_boot_init(void)
     }
 }
 
+void ota_resume_pending(void)
+{
+    char id[ID_LEN + 1];
+    if (gw_nvs_get(NVS_OTA_ID, id, sizeof(id))) {
+        /* a resend of the command's id gets "accepted" until the final ack is out */
+        cmd_remember_accepted(id, "ota");
+    }
+}
+
 void ota_confirm(void)
 {
     if (!s_pending_verify) {
@@ -671,61 +646,41 @@ void ota_confirm(void)
     }
     if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
         s_pending_verify = false;
-        s_report_pending = true;
         ESP_LOGI(TAG, "image %s confirmed", esp_app_get_description()->version);
     }
 }
 
-void ota_add_status(cJSON *res)
+/* §6.5 steps 3 and 4: the final ack of an update that restarted the board. */
+bool ota_report_result(void)
 {
-    cJSON_AddStringToObject(res, "version", esp_app_get_description()->version);
-    cJSON_AddStringToObject(res, "partition", esp_ota_get_running_partition()->label);
-    cJSON_AddBoolToObject(res, "confirmed", !s_pending_verify);
-    const esp_partition_t *invalid = esp_ota_get_last_invalid_partition();
-    esp_app_desc_t desc;
-    if (invalid && esp_ota_get_partition_description(invalid, &desc) == ESP_OK) {
-        cJSON_AddStringToObject(res, "rolled_back_from", desc.version);
+    char id[ID_LEN + 1], target[VERSION_LEN], previous[VERSION_LEN];
+    if (!gw_nvs_get(NVS_OTA_ID, id, sizeof(id)) || !gw_nvs_get(NVS_OTA_VER, target, sizeof(target))) {
+        return true;   /* no update was open */
     }
-    cJSON *ota = cJSON_AddObjectToObject(res, "ota");
-    cJSON_AddStringToObject(ota, "state", s_state);
-    if (s_target[0]) {
-        cJSON_AddStringToObject(ota, "version", s_target);
+    if (s_pending_verify || !mqtt_link_wait_ready(0)) {
+        return false;
     }
-    if (s_progress >= 0) {
-        cJSON_AddNumberToObject(ota, "progress", s_progress);
-    }
-    if (s_error[0]) {
-        cJSON_AddStringToObject(ota, "error", s_error);
-    }
-}
-
-void ota_report_update(void)
-{
-    if (!s_report_pending || !mqtt_link_wait_ready(0)) {
-        return;
+    if (!gw_nvs_get(NVS_OTA_PREV, previous, sizeof(previous))) {
+        snprintf(previous, sizeof(previous), "unknown");
     }
     const char *version = esp_app_get_description()->version;
-    const char *partition = esp_ota_get_running_partition()->label;
-    char previous[VERSION_LEN] = "unknown";
-    esp_app_desc_t desc;
-    const esp_partition_t *other = esp_ota_get_next_update_partition(NULL);
-    if (other && esp_ota_get_partition_description(other, &desc) == ESP_OK) {
-        snprintf(previous, sizeof(previous), "%s", desc.version);
+    if (strcmp(version, target) == 0) {
+        /* the new image runs, confirmed and connected */
+        gw_nvs_set("prev", previous);
+        gw_nvs_set("prev_of", version);
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddStringToObject(res, "version", version);
+        cJSON_AddStringToObject(res, "previous", previous);
+        cJSON_AddStringToObject(res, "partition", esp_ota_get_running_partition()->label);
+        gw_state_publish(true);   /* before the ack: the state already names the new version */
+        cmd_ack(id, "ota", "done", NULL, NULL, res);
+    } else {
+        char text[96];
+        snprintf(text, sizeof(text), "%s did not confirm; %s runs again", target, version);
+        cmd_ack(id, "ota", "failed", "rolled_back", text, NULL);
     }
-
-    cJSON *msg = cJSON_CreateObject();
-    cJSON_AddStringToObject(msg, "version", version);
-    cJSON_AddStringToObject(msg, "previous", previous);
-    cJSON_AddStringToObject(msg, "partition", partition);
-    if (clock_valid()) {
-        cJSON_AddNumberToObject(msg, "time", (double)time(NULL));
-    }
-    char *json = cJSON_PrintUnformatted(msg);
-    cJSON_Delete(msg);
-    if (!json || mqtt_link_publish_own("firmware", json, true) != ESP_OK) {
-        free(json);
-        return;
-    }
-    free(json);
-    s_report_pending = false;
+    gw_nvs_erase(NVS_OTA_ID);
+    gw_nvs_erase(NVS_OTA_VER);
+    gw_nvs_erase(NVS_OTA_PREV);
+    return true;
 }
