@@ -166,8 +166,8 @@ MQTT client settings to start with:
 7. **Real mower topics** ([#21](https://github.com/rmx-lt/rmx-mower-gateway/issues/21), decided 2026-11-13): yes. The firmware
    uses only `mower/<name>/…` (`main/mqtt_link.c`), where `<name>` is the certificate CN (e.g. `mower-01`), and the
    shared `mower/status/server` (the records topics were removed in issue 52). The `probe/…` topics and the `probe-device` login in
-   the 2026-10-19 entries above are history; the protocol itself is defined in
-   [rmx-lt/blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
+   the 2026-10-19 entries above are history; the protocol itself is defined in wiki
+   [Mower-Protocol](Mower-Protocol) (work: [rmx-lt/blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6)).
 
 Open questions: modem firmware update B04 → B06 ([#20](https://github.com/rmx-lt/rmx-mower-gateway/issues/20)).
 
