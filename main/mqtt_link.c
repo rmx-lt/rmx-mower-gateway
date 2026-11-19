@@ -1,6 +1,7 @@
 #include "mqtt_link.h"
 #include "creds.h"
 #include "devcert.h"
+#include "gw_link.h"
 #include "gwstate.h"
 #include "usage.h"
 
@@ -23,7 +24,6 @@ static const char *TAG = "mqtt";
 #define FW_RES_SUB   BIT4
 
 #define SERVER_STATUS_TOPIC "mower/status/server"
-#define SERVER_LOST_US      (10 * 1000000LL)   /* wiki Mower-Protocol §4.2 */
 
 /* reassemble fragmented messages up to this size */
 #define MAX_MESSAGE (128 * 1024)
@@ -40,9 +40,6 @@ static mqtt_link_fw_cb_t s_fw_cb;
 static int s_fw_chunk_sub_id = -1;
 static int s_fw_res_sub_id = -1;
 static int64_t s_connect_started_us;
-static volatile bool s_server_online;
-static volatile bool s_connected;
-static volatile int64_t s_down_since_us;   /* 0 while the server link is up */
 
 /* reassembly of fragmented messages */
 static char *s_rx;
@@ -52,8 +49,9 @@ static char s_rx_topic[96];
 static void handle_message(const char *topic, const char *data, size_t len)
 {
     if (strcmp(topic, SERVER_STATUS_TOPIC) == 0) {
-        s_server_online = len == 6 && memcmp(data, "online", 6) == 0;
-        ESP_LOGI(TAG, "server %s", s_server_online ? "online" : "offline");
+        bool online = len == 6 && memcmp(data, "online", 6) == 0;
+        ESP_LOGI(TAG, "server %s", online ? "online" : "offline");
+        gw_link_set(GW_SERVER_ONLINE, online);
         return;
     }
     if (strcmp(topic, s_fw_chunk_topic) == 0) {
@@ -141,8 +139,8 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "connected as %s in %lld ms (session present %d)", creds_device_name(),
                  (esp_timer_get_time() - s_connect_started_us) / 1000, e->session_present);
-        s_connected = true;
         xEventGroupSetBits(s_ev, CONNECTED);
+        gw_link_set(GW_MQTT_UP, true);
         esp_mqtt_client_subscribe_single(s_client, SERVER_STATUS_TOPIC, 1);
         if (s_cmd_cb) {
             esp_mqtt_client_subscribe_single(s_client, s_cmd_topic, 1);
@@ -154,9 +152,9 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "disconnected");
-        s_connected = false;
-        s_server_online = false;   /* learnt again from the retained message */
         xEventGroupClearBits(s_ev, CONNECTED | FW_CHUNK_SUB | FW_RES_SUB);
+        gw_link_set(GW_MQTT_UP, false);
+        gw_link_set(GW_SERVER_ONLINE, false);   /* learnt again from the retained message */
         break;
     case MQTT_EVENT_SUBSCRIBED:
         if (e->msg_id == s_fw_chunk_sub_id) {
@@ -291,27 +289,12 @@ esp_err_t mqtt_link_send_ack(const char *json)
 
 bool mqtt_link_connected(void)
 {
-    return s_connected;
+    return gw_link_get() & GW_MQTT_UP;
 }
 
 bool mqtt_link_server_up(void)
 {
-    return s_connected && s_server_online;
-}
-
-void mqtt_link_update(void)
-{
-    if (mqtt_link_server_up()) {
-        s_down_since_us = 0;
-    } else if (s_down_since_us == 0) {
-        s_down_since_us = esp_timer_get_time();
-    }
-}
-
-bool mqtt_link_server_lost(void)
-{
-    int64_t since = s_down_since_us;
-    return since != 0 && esp_timer_get_time() - since >= SERVER_LOST_US;
+    return gw_link_get() & GW_SERVER_LINK_UP;
 }
 
 void mqtt_link_stop(void)

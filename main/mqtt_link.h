@@ -46,10 +46,4 @@ bool mqtt_link_connected(void);
 /* The server link of §4.2: MQTT is up and mower/status/server says "online". */
 bool mqtt_link_server_up(void);
 
-/* Call often (every 100 ms): keeps the time the server link has been down. */
-void mqtt_link_update(void);
-
-/* The server link has been down for 10 s without a break (§4.2). */
-bool mqtt_link_server_lost(void);
-
 void mqtt_link_stop(void);

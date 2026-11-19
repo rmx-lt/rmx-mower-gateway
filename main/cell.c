@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 #include "esp_modem_api.h"
 #include "board.h"
+#include "gw_link.h"
 #include "usage.h"
 #include "sdkconfig.h"
 
@@ -37,12 +38,14 @@ static void on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
                  IP2STR(&e->ip_info.ip), IP2STR(&e->ip_info.gw), IP2STR(&dns.ip.u_addr.ip4));
         xEventGroupClearBits(s_ev, LOST_IP);
         xEventGroupSetBits(s_ev, GOT_IP);
+        gw_link_set(GW_CELL_UP, true);
         usage_attach_netif(e->esp_netif);   /* a redial makes a new lwIP netif */
         board_led(true);
     } else if (id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGW(TAG, "PPP lost IP");
         xEventGroupClearBits(s_ev, GOT_IP);
         xEventGroupSetBits(s_ev, LOST_IP);
+        gw_link_set(GW_CELL_UP, false);
         board_led(false);
     }
 }
@@ -127,6 +130,7 @@ static esp_err_t dial(int timeout_ms)
 
     int64_t t0 = esp_timer_get_time();
     xEventGroupClearBits(s_ev, GOT_IP | LOST_IP);
+    gw_link_set(GW_CELL_UP, false);
     err = esp_modem_set_mode(s_dce, ESP_MODEM_MODE_DATA);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "entering data mode failed: %s", esp_err_to_name(err));
@@ -282,6 +286,7 @@ esp_err_t cell_with_command_mode(cell_cmd_fn fn, void *ctx, int wait_ms)
         esp_modem_set_mode(s_dce, ESP_MODEM_MODE_COMMAND);
         xEventGroupClearBits(s_ev, GOT_IP);
         xEventGroupSetBits(s_ev, LOST_IP);
+        gw_link_set(GW_CELL_UP, false);
         board_led(false);
     }
     ESP_LOGI(TAG, "AT session: +++ %lld ms, commands %lld ms, ATO %lld ms (%s)",

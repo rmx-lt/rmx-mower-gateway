@@ -25,11 +25,13 @@
 #include "cell.h"
 #include "creds.h"
 #include "devcert.h"
+#include "gw_link.h"
 #include "gwstate.h"
 #include "metrics.h"
 #include "mqtt_link.h"
 #include "ota.h"
 #include "remote_cmd.h"
+#include "supervisor.h"
 #include "sdkconfig.h"
 
 #if !CONFIG_MBEDTLS_HAVE_TIME_DATE
@@ -53,8 +55,7 @@ static bool connect_mqtt(void)
         ESP_LOGE(TAG, "mqtt connect: FAIL");
         return false;
     }
-    ESP_LOGI(TAG, "mqtt connect: PASS");
-    ota_confirm();   /* a new image that reaches the broker is good */
+    ESP_LOGI(TAG, "mqtt connect: PASS");   /* the supervisor confirms a new image */
     return true;
 }
 
@@ -83,6 +84,7 @@ void app_main(void)
     ota_boot_init();   /* a new image rolls back unless MQTT connects in time */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(gw_link_init());
 
     board_init();
     if (cell_start(60000) != ESP_OK && !cell_wait_ip(180000)) {
@@ -100,6 +102,7 @@ void app_main(void)
         ESP_LOGW(TAG, "SNTP: no time yet, not starting TLS");
     }
     ESP_LOGI(TAG, "clock set by SNTP: %lld", (long long)time(NULL));
+    gw_link_set(GW_CLOCK_VALID, true);
 #if CONFIG_GATEWAY_TEST_CLOCK_SHIFT_DAYS != 0
     /* Test only (wiki Mower-Gateway-Plan, certificate dates): a wrong clock must make TLS refuse the broker. */
     esp_netif_sntp_deinit();
@@ -111,20 +114,12 @@ void app_main(void)
 
     ESP_ERROR_CHECK(remote_cmd_init());
     ota_resume_pending();
-    metrics_start();   /* state, catalogue, telemetry and monitor streams once the server link is up */
+    metrics_start();   /* catalogue, telemetry and monitor streams once the server link is up */
+    ESP_ERROR_CHECK(supervisor_start());   /* state, image confirm, OTA result, alive log */
     bool online = connect_mqtt();
     ESP_LOGI(TAG, "STARTUP %s, free heap %u, min %u, internal %u", online ? "OK" : "FAILED",
              (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size(),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-
-    /* Stay online: esp-mqtt reconnects by itself, cell redials on PPP loss. */
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(60000));
-        if (mqtt_link_wait_ready(0)) {
-            ota_confirm();   /* MQTT came up after the first try */
-            ota_report_result();
-        }
-        ESP_LOGI(TAG, "alive: ppp %s, rssi %d, free heap %u", cell_is_up() ? "up" : "down",
-                 cell_last_rssi(), (unsigned)esp_get_free_heap_size());
-    }
+    /* app_main returns: esp-mqtt reconnects by itself, cell redials on PPP loss,
+     * the supervisor acts on link changes. */
 }
