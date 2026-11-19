@@ -1,0 +1,10 @@
+{
+  "name": "rmx_codec",
+  "version": "0.1.0",
+  "description": "Pure C codecs of the gateway firmware (host-tested). Read by the PlatformIO native test env only; the firmware builds it as an ESP-IDF component.",
+  "build": {
+    "srcDir": ".",
+    "includeDir": "include",
+    "srcFilter": ["+<*.c>"]
+  }
+}
