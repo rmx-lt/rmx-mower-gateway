@@ -139,13 +139,36 @@ the running one), size, whole-image SHA-256 against the chunk header, then `esp_
   `image 0.3.1 confirmed` on the first MQTT connect. `status`: version 0.3.1, partition
   `ota_1`, confirmed, ota idle. The server `info` for `0.3.1.bin` matched that size and
   the file's SHA-256. A tampered image was not sent to the device.
-- Other failure paths (crash on boot, wrong key, power cut) are not verified on the board:
-  [rmx-mower-gateway#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15).
+- OTA failure paths, verified on the board 2026-11-19 over LTE (issue 15; 0.4.0 tree, commands with
+  `tools/mqtt_cmd.ps1`, test images uploaded as `0.4.0-t15*.bin` and deleted afterwards; the test hacks are not in the repo):
+  - **Self-test fails** (never reaches MQTT) → rollback and `failed` / `rolled_back`: verified 2026-11-15 (issue 65).
+  - **Crash on boot** (image that calls `abort()` right after `ota_boot_init`): written in 48 s, booted `ota_1`
+    (`state 1`, "confirm within 300 s"), `abort() was called`, `Rebooting...`; the bootloader loaded `ota_0` again,
+    `rolled back from 0.4.0-t15crash (ota_1)`, and 11 s after that boot the ack `failed` / `rolled_back`
+    ("0.4.0-t15crash did not confirm; 0.4.0 runs again"). One crash is enough: no confirm timer needed.
+  - **Signed with another key** (a fresh RSA-3072 key; `espsecure verify_signature` with our key fails): the whole
+    image downloads and matches the chunk-header SHA-256, then `esp_image: Secure boot signature verification failed`,
+    `image valid, signature bad`, `esp_ota_ops: New image failed verification`, ack `failed` / `bad_image`. No restart;
+    0.4.0 keeps running.
+  - **Link lost mid-download, 60 s**: the running test image pulled FLIGHT (GPIO25) low after chunk 40 (radio off).
+    `PPP lost IP` 7 s later, the request for chunk 43 timed out (`asking again (1/5)`, `MQTT down before chunk retry 1`),
+    radio on after 60 s, PPP up 5 s later, MQTT 15 s after that; chunk 43 was requested again and the download went on
+    to 100 %, restart into `ota_1`, `confirmed`, ack `done`. The whole update took 182 s instead of ~100 s.
+  - **Link lost for 15 min**: the same at chunk 40, radio off for 900 s. Five retries of chunk 43, each after
+    `cell_wait_ip` gave up (120 s); the cell watchdog power-cycled the modem after 5 and 10 failed redials. At 652 s:
+    `failed: download_failed`, nothing written to the boot slot, 0.4.0-t15long kept running and reconnected 15 s after
+    the radio came back. **The `download_failed` ack was lost**: it was published while offline and esp-mqtt drops
+    outbox messages after 30 s (`OUTBOX_EXPIRED_TIMEOUT_MS`), so it never reached `gateway/cmd/ack`
+    ([#88](https://github.com/rmx-lt/rmx-mower-gateway/issues/88)). A resend of the same command id gets it from the
+    repeat memory.
+  - **Power cut while writing**: not verified; it needs someone to pull the power during a download
+    ([#90](https://github.com/rmx-lt/rmx-mower-gateway/issues/90)).
 
 Open work is tracked as issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1):
 reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway/issues/16)),
 CMUX / power saving / modem MQTT AT path ([#19](https://github.com/rmx-lt/rmx-mower-gateway/issues/19)),
-OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15)).
+OTA power cut while writing ([#90](https://github.com/rmx-lt/rmx-mower-gateway/issues/90)),
+acks produced while offline ([#88](https://github.com/rmx-lt/rmx-mower-gateway/issues/88)).
 
 ## Firmware structure (implemented)
 
