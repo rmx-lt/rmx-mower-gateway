@@ -153,6 +153,10 @@ The byte layout is wiki [Server-App](Server-App#firmware-over-mqtt). The device 
   with a new request id, up to 5 times in a row; then the update ends with `download_failed` (so does an error
   answer from the server). Bytes already written stay. A reset of the board drops the progress; the next `ota`
   command starts again. The running firmware is untouched until the whole image checks out.
+  Verified 2026-11-19 (issue 15): a 60 s radio outage mid-download resumed at the missing chunk and finished; a 15-minute
+  outage ended `download_failed` after the 5 retries (~11 min), but that ack was lost offline (issue 88). A crash on
+  boot rolled back after one crash, an image signed with another key was refused (`bad_image`). Details:
+  [Mower-Gateway-Plan](Mower-Gateway-Plan).
 
 One-time setup (the bootloader can't be updated over the air, so this needs USB):
 
