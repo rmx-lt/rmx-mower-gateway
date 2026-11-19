@@ -88,8 +88,10 @@ static void fail(const char *error, const char *message)
     cmd_ack(s_req.id, "ota", "failed", error, message, NULL);
 }
 
-static void on_fw(const uint8_t *data, size_t len, bool chunk)
+/* Both firmware routes; ctx is non-NULL for fw/chunk (binary), NULL for fw/res (JSON). */
+static void on_fw(const char *subtopic, const uint8_t *data, size_t len, void *ctx)
 {
+    bool chunk = ctx != NULL;
     if (!s_listen || !s_rxq || len == 0 || len > FW_MAX_FRAME) {
         return;
     }
@@ -124,7 +126,6 @@ static void finish_task(void) __attribute__((noreturn));
 static void finish_task(void)
 {
     s_listen = false;
-    mqtt_link_set_fw_handler(NULL);
     drain_rx();
     s_busy = false;
     vTaskDelete(NULL);
@@ -292,7 +293,6 @@ static void ota_task(void *arg)
 {
     int64_t t0 = esp_timer_get_time();
     s_listen = true;
-    mqtt_link_set_fw_handler(on_fw);
     drain_rx();
     if (psa_crypto_init() != PSA_SUCCESS) {
         fail("failed", "crypto init failed");
@@ -559,6 +559,9 @@ static void confirm_timeout(void *arg)
 
 void ota_boot_init(void)
 {
+    /* Subscribed before the first fw/req: mqtt_link_wait_ready() waits for both. */
+    mqtt_link_route(MQTT_SCOPE_GATEWAY, "fw/chunk", 1, MQTT_ROUTE_READY, on_fw, (void *)1);
+    mqtt_link_route(MQTT_SCOPE_GATEWAY, "fw/res", 1, MQTT_ROUTE_READY, on_fw, NULL);
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_ota_img_states_t state;
     if (esp_ota_get_state_partition(running, &state) != ESP_OK) {

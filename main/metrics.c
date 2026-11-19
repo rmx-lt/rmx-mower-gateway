@@ -344,7 +344,7 @@ static void catalogue_publish(void)
         }
         char sub[48];
         snprintf(sub, sizeof(sub), "metrics/%s", s_parts[p]);
-        mqtt_link_publish(sub, json, 0, 1, true);
+        mqtt_link_publish(MQTT_SCOPE_GATEWAY, sub, json, 0, 1, true);
         free(json);
     }
     cJSON *idx = cJSON_CreateObject();
@@ -356,7 +356,7 @@ static void catalogue_publish(void)
     char *json = cJSON_PrintUnformatted(idx);
     cJSON_Delete(idx);
     if (json) {
-        mqtt_link_publish("metrics/index", json, 0, 1, true);
+        mqtt_link_publish(MQTT_SCOPE_GATEWAY, "metrics/index", json, 0, 1, true);
         free(json);
     }
 }
@@ -418,7 +418,7 @@ static void telemetry_poll(int64_t now)
     size_t len = strlen(json);
     if (len > 4096) {
         ESP_LOGE(TAG, "telemetry is %u bytes, more than 4096", (unsigned)len);
-    } else if (mqtt_link_publish("telemetry", json, 0, 0, false) == ESP_OK) {
+    } else if (mqtt_link_publish(MQTT_SCOPE_GATEWAY, "telemetry", json, 0, 0, false) == ESP_OK) {
         ESP_LOGI(TAG, "telemetry %u bytes: %.200s%s", (unsigned)len, json, len > 200 ? "..." : "");
     }
     free(json);
@@ -633,7 +633,7 @@ static void stream_flush(stream_t *s, int64_t now)
     char *json = cJSON_PrintUnformatted(msg);
     cJSON_Delete(msg);
     if (json) {
-        mqtt_link_publish("monitor", json, 0, 0, false);
+        mqtt_link_publish(MQTT_SCOPE_GATEWAY, "monitor", json, 0, 0, false);
         free(json);
     }
     s->count = 0;
