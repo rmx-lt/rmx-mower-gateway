@@ -10,7 +10,8 @@
 #define USAGE_MAX_TOPICS 32
 
 /* Call when PPP has an IP (every time: a redial makes a new lwIP netif). Counts
- * the IP packets of that interface in both directions from then on. */
+ * the IP packets of that interface in both directions from then on. The first
+ * call registers usage.total.up and usage.total.down. */
 void usage_attach_netif(esp_netif_t *ppp);
 
 uint64_t usage_total_up(void);     /* mower -> network, bytes */

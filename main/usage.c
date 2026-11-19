@@ -9,8 +9,19 @@
 #include "lwip/ip4_addr.h"
 #include "lwip/netif.h"
 #include "lwip/pbuf.h"
+#include "metrics.h"
 
 static const char *TAG = "usage";
+
+static bool read_total(void *ctx, double *v);
+static const metric_def_t s_total_defs[2] = {
+    { .name = "usage.total.up", .label = "Data sent",
+        .description = "Bytes sent on the mobile connection since the gateway started, as counted on the network interface. The SIM allowance is charged for this.",
+        .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
+    { .name = "usage.total.down", .label = "Data received",
+        .description = "Bytes received on the mobile connection since the gateway started, as counted on the network interface.",
+        .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
+};
 
 #define NAME_LEN 56
 
@@ -72,6 +83,14 @@ void usage_attach_netif(esp_netif_t *ppp)
         n->output = out_hook;
     }
     s_ppp = n;
+    metrics_register(&s_total_defs[0], read_total, (void *)1);   /* once: the same name again is ignored */
+    metrics_register(&s_total_defs[1], read_total, NULL);
+}
+
+static bool read_total(void *ctx, double *v)
+{
+    *v = (double)(ctx ? usage_total_up() : usage_total_down());
+    return true;
 }
 
 uint64_t usage_total_up(void)

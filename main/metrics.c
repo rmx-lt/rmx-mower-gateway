@@ -1,10 +1,10 @@
 #include "metrics.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -13,6 +13,7 @@
 #include "cell.h"
 #include "gw_link.h"
 #include "gwstate.h"
+#include "monitor.h"
 #include "mqtt_link.h"
 #include "ota.h"
 #include "usage.h"
@@ -22,43 +23,10 @@ static const char *TAG = "metrics";
 /* Bump when the catalogue changes (names, units, periods, rates, ...). */
 #define CATALOGUE_REVISION 1
 
-#define TICK_MS            100
-#define MONITOR_BUDGET     100    /* values per second, wiki Mower-Protocol §15 */
-#define MON_MAX_METRICS    16
-#define MON_BATCH          4
-#define MON_FLUSH_US       200000
-#define MON_HOLD_DEFAULT   10
-#define MON_HOLD_MAX       60
+#define TICK_MS     100
+#define MAX_METRICS 32
 
 /* ---------------------------------------------------------------- catalogue */
-
-typedef enum {
-    M_SIGNAL,
-    M_TOTAL_UP, M_TOTAL_DOWN,
-    M_CPU, M_CORE0, M_CORE1,
-    M_MEM_FREE, M_MEM_MIN, M_MEM_LARGEST, M_MEM_PCT,
-    M_NVS_PCT,
-    M_COUNT,
-    M_FAM_UP = M_COUNT,   /* usage.mqtt.up.*   (family) */
-    M_FAM_DOWN,           /* usage.mqtt.down.* (family) */
-    M_DEFS
-} metric_id_t;
-
-typedef struct {
-    const char *name;
-    const char *key;
-    const char *label;
-    const char *description;
-    const char *unit;
-    const char *part;
-    bool counter;
-    int period;       /* seconds in telemetry */
-    bool monitor;     /* offers the monitor rates */
-    bool chart;
-    bool has_min, has_max, has_low, has_high;
-    double min, max, low, high;
-    int decimals;
-} metric_def_t;
 
 /* Monitor rates (samples per second) the monitorable metrics offer. */
 static const int s_rates[] = { 1, 2, 5, 10 };
@@ -68,65 +36,96 @@ static const char *const s_parts[] = { "signal", "usage", "system" };
 static const char *const s_part_labels[] = { "Signal", "Data usage", "System" };
 #define N_PARTS (sizeof(s_parts) / sizeof(s_parts[0]))
 
-static const metric_def_t s_defs[M_DEFS] = {
-    /* The modem's signal can only be read with PPP paused, about once a minute,
-     * so it offers no monitor rates. */
-    [M_SIGNAL] = { .name = "signal.rssi", .key = "signal.strength", .label = "Signal strength",
-        .description = "Received signal strength of the mobile connection. Read once a minute.",
-        .unit = "dBm", .part = "signal", .period = 60, .chart = true,
-        .has_min = true, .min = -120, .has_max = true, .max = -50, .has_low = true, .low = -100, .decimals = 0 },
-    [M_TOTAL_UP] = { .name = "usage.total.up", .label = "Data sent",
-        .description = "Bytes sent on the mobile connection since the gateway started, as counted on the network interface. The SIM allowance is charged for this.",
-        .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-    [M_TOTAL_DOWN] = { .name = "usage.total.down", .label = "Data received",
-        .description = "Bytes received on the mobile connection since the gateway started, as counted on the network interface.",
-        .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-    [M_CPU] = { .name = "system.cpu", .label = "Processor load",
-        .description = "Average load of both processor cores.",
-        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
-        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
-    [M_CORE0] = { .name = "system.core0", .label = "Processor load, core 0",
-        .description = "Load of processor core 0.",
-        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
-        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
-    [M_CORE1] = { .name = "system.core1", .label = "Processor load, core 1",
-        .description = "Load of processor core 1.",
-        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
-        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
-    [M_MEM_FREE] = { .name = "system.memory.free", .label = "Free memory",
-        .description = "Free internal memory.",
-        .unit = "B", .part = "system", .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-    [M_MEM_MIN] = { .name = "system.memory.min_free", .label = "Lowest free memory",
-        .description = "Smallest amount of free internal memory since the gateway started.",
-        .unit = "B", .part = "system", .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-    [M_MEM_LARGEST] = { .name = "system.memory.largest", .label = "Largest free block",
-        .description = "Largest block of internal memory that can be allocated now.",
-        .unit = "B", .part = "system", .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-    [M_MEM_PCT] = { .name = "system.memory.pct", .label = "Memory used",
-        .description = "Share of the internal memory in use.",
-        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
-        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
-    [M_NVS_PCT] = { .name = "system.nvs.pct", .label = "Settings storage used",
-        .description = "Share of the settings area in flash that is in use.",
-        .unit = "%", .part = "system", .period = 60, .chart = true,
-        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
-    [M_FAM_UP] = { .name = "usage.mqtt.up.*", .label = "MQTT data sent per topic",
-        .description = "Bytes of whole MQTT packets sent on one topic since the gateway started. One metric per topic, named without mower/<name>/.",
-        .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-    [M_FAM_DOWN] = { .name = "usage.mqtt.down.*", .label = "MQTT data received per topic",
-        .description = "Bytes of whole MQTT packets received on one topic since the gateway started. One metric per topic, named without mower/<name>/.",
-        .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
-};
-
 #define FAM_UP_PREFIX   "usage.mqtt.up."
 #define FAM_DOWN_PREFIX "usage.mqtt.down."
 
-/* ------------------------------------------------------------------- values */
-
 typedef struct {
-    int8_t type;     /* 0 static metric (idx = metric_id_t), 1 up family member, 2 down family member */
-    int16_t idx;
-} mref_t;
+    const metric_def_t *def;
+    metric_read_fn fn;
+    void *ctx;
+    int8_t family;   /* 0 a metric, 1 usage.mqtt.up.*, 2 usage.mqtt.down.* */
+} metric_t;
+
+static metric_t s_metrics[MAX_METRICS];
+static int s_n;
+static bool s_published;   /* the catalogue went out: the set is fixed */
+static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
+
+static esp_err_t add(const metric_def_t *def, metric_read_fn fn, void *ctx, int8_t family)
+{
+    esp_err_t err = ESP_OK;
+    portENTER_CRITICAL(&s_mux);
+    int i = 0;
+    while (i < s_n && strcmp(s_metrics[i].def->name, def->name) != 0) {
+        i++;
+    }
+    if (i < s_n) {
+        /* already there */
+    } else if (s_published) {
+        err = ESP_ERR_INVALID_STATE;
+    } else if (s_n == MAX_METRICS) {
+        err = ESP_ERR_NO_MEM;
+    } else {
+        s_metrics[s_n++] = (metric_t){ def, fn, ctx, family };
+    }
+    portEXIT_CRITICAL(&s_mux);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "metric %s not registered: %s", def->name, esp_err_to_name(err));
+    }
+    return err;
+}
+
+esp_err_t metrics_register(const metric_def_t *def, metric_read_fn fn, void *ctx)
+{
+    if (!def || !def->name || !def->part || !fn) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return add(def, fn, ctx, 0);
+}
+
+/* ------------------------------------------------------------ system metrics */
+
+typedef enum { SYS_CPU, SYS_CORE0, SYS_CORE1, SYS_MEM_FREE, SYS_MEM_MIN, SYS_MEM_LARGEST, SYS_MEM_PCT, SYS_NVS_PCT,
+               SYS_COUNT } sys_id_t;
+
+static const metric_def_t s_sys_defs[SYS_COUNT] = {
+    [SYS_CPU] = { .name = "system.cpu", .label = "Processor load",
+        .description = "Average load of both processor cores.",
+        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
+        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
+    [SYS_CORE0] = { .name = "system.core0", .label = "Processor load, core 0",
+        .description = "Load of processor core 0.",
+        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
+        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
+    [SYS_CORE1] = { .name = "system.core1", .label = "Processor load, core 1",
+        .description = "Load of processor core 1.",
+        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
+        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
+    [SYS_MEM_FREE] = { .name = "system.memory.free", .label = "Free memory",
+        .description = "Free internal memory.",
+        .unit = "B", .part = "system", .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
+    [SYS_MEM_MIN] = { .name = "system.memory.min_free", .label = "Lowest free memory",
+        .description = "Smallest amount of free internal memory since the gateway started.",
+        .unit = "B", .part = "system", .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
+    [SYS_MEM_LARGEST] = { .name = "system.memory.largest", .label = "Largest free block",
+        .description = "Largest block of internal memory that can be allocated now.",
+        .unit = "B", .part = "system", .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 },
+    [SYS_MEM_PCT] = { .name = "system.memory.pct", .label = "Memory used",
+        .description = "Share of the internal memory in use.",
+        .unit = "%", .part = "system", .period = 60, .monitor = true, .chart = true,
+        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
+    [SYS_NVS_PCT] = { .name = "system.nvs.pct", .label = "Settings storage used",
+        .description = "Share of the settings area in flash that is in use.",
+        .unit = "%", .part = "system", .period = 60, .chart = true,
+        .has_min = true, .min = 0, .has_max = true, .max = 100, .has_high = true, .high = 90, .decimals = 1 },
+};
+
+static const metric_def_t s_fam_up = { .name = "usage.mqtt.up.*", .label = "MQTT data sent per topic",
+    .description = "Bytes of whole MQTT packets sent on one topic since the gateway started. One metric per topic, named without mower/<name>/.",
+    .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 };
+static const metric_def_t s_fam_down = { .name = "usage.mqtt.down.*", .label = "MQTT data received per topic",
+    .description = "Bytes of whole MQTT packets received on one topic since the gateway started. One metric per topic, named without mower/<name>/.",
+    .unit = "B", .part = "usage", .counter = true, .period = 60, .monitor = true, .chart = true, .has_min = true, .decimals = 0 };
 
 static double round1(double v)
 {
@@ -179,43 +178,28 @@ static void cpu_sample(void)
     have_last = true;
 }
 
-/* False: the value is not known (null). */
-static bool static_value(int id, double *v)
+static bool sys_read(void *ctx, double *v)
 {
-    switch (id) {
-    case M_SIGNAL: {
-        int csq = cell_last_rssi();
-        if (csq == 99) {
-            return false;
-        }
-        *v = -113 + 2 * csq;
-        return true;
-    }
-    case M_TOTAL_UP:
-        *v = (double)usage_total_up();
-        return true;
-    case M_TOTAL_DOWN:
-        *v = (double)usage_total_down();
-        return true;
-    case M_CPU:
+    switch ((sys_id_t)(intptr_t)ctx) {
+    case SYS_CPU:
         cpu_sample();
         *v = s_cpu;
         return !isnan(s_cpu);
-    case M_CORE0:
-    case M_CORE1:
+    case SYS_CORE0:
+    case SYS_CORE1:
         cpu_sample();
-        *v = s_core[id == M_CORE0 ? 0 : 1];
+        *v = s_core[(intptr_t)ctx == SYS_CORE0 ? 0 : 1];
         return !isnan(*v);
-    case M_MEM_FREE:
+    case SYS_MEM_FREE:
         *v = (double)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         return true;
-    case M_MEM_MIN:
+    case SYS_MEM_MIN:
         *v = (double)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
         return true;
-    case M_MEM_LARGEST:
+    case SYS_MEM_LARGEST:
         *v = (double)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         return true;
-    case M_MEM_PCT: {
+    case SYS_MEM_PCT: {
         size_t total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
         size_t free_b = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         if (!total) {
@@ -224,7 +208,7 @@ static bool static_value(int id, double *v)
         *v = round1(100.0 * (double)(total - free_b) / (double)total);
         return true;
     }
-    case M_NVS_PCT: {
+    case SYS_NVS_PCT: {
         nvs_stats_t st;
         if (nvs_get_stats(NULL, &st) != ESP_OK || st.total_entries == 0) {
             return false;
@@ -237,11 +221,13 @@ static bool static_value(int id, double *v)
     }
 }
 
-static bool ref_value(mref_t r, double *v)
+/* ------------------------------------------------------------------- values */
+
+bool metrics_read(metric_ref_t r, double *v)
 {
     switch (r.type) {
     case 0:
-        return static_value(r.idx, v);
+        return r.idx >= 0 && r.idx < s_n && s_metrics[r.idx].fn(s_metrics[r.idx].ctx, v);
     case 1:
         *v = (double)usage_topic_up(r.idx);
         return true;
@@ -251,15 +237,24 @@ static bool ref_value(mref_t r, double *v)
     }
 }
 
-/* Name -> reference for monitor requests. Family members must already exist. */
-static bool resolve(const char *name, mref_t *out)
+bool metrics_rate_offered(int rate)
 {
-    for (int i = 0; i < M_COUNT; i++) {
-        if (strcmp(s_defs[i].name, name) == 0) {
-            if (!s_defs[i].monitor) {
+    for (size_t r = 0; r < N_RATES; r++) {
+        if (rate == s_rates[r]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool metrics_resolve(const char *name, metric_ref_t *out)
+{
+    for (int i = 0; i < s_n; i++) {
+        if (!s_metrics[i].family && strcmp(s_metrics[i].def->name, name) == 0) {
+            if (!s_metrics[i].def->monitor) {
                 return false;
             }
-            *out = (mref_t){ 0, (int16_t)i };
+            *out = (metric_ref_t){ 0, (int16_t)i };
             return true;
         }
     }
@@ -275,7 +270,7 @@ static bool resolve(const char *name, mref_t *out)
     if (topic && topic[0]) {
         for (int i = 0; i < usage_topic_count(); i++) {
             if (strcmp(usage_topic_name(i), topic) == 0) {
-                *out = (mref_t){ (int8_t)type, (int16_t)i };
+                *out = (metric_ref_t){ (int8_t)type, (int16_t)i };
                 return true;
             }
         }
@@ -321,17 +316,21 @@ static cJSON *entry(const metric_def_t *d)
     return e;
 }
 
-/* §16.1: parts first, then the index that lists them. */
+/* §16.1: parts first, then the index that lists them. Within a part, the
+ * metrics come in the order they were registered. */
 static void catalogue_publish(void)
 {
+    portENTER_CRITICAL(&s_mux);
+    s_published = true;
+    portEXIT_CRITICAL(&s_mux);
     for (size_t p = 0; p < N_PARTS; p++) {
         cJSON *part = cJSON_CreateObject();
         cJSON_AddNumberToObject(part, "revision", CATALOGUE_REVISION);
         cJSON_AddStringToObject(part, "label", s_part_labels[p]);
         cJSON *arr = cJSON_AddArrayToObject(part, "metrics");
-        for (int i = 0; i < M_DEFS; i++) {
-            if (strcmp(s_defs[i].part, s_parts[p]) == 0) {
-                cJSON_AddItemToArray(arr, entry(&s_defs[i]));
+        for (int i = 0; i < s_n; i++) {
+            if (strcmp(s_metrics[i].def->part, s_parts[p]) == 0) {
+                cJSON_AddItemToArray(arr, entry(s_metrics[i].def));
             }
         }
         char *json = cJSON_PrintUnformatted(part);
@@ -363,7 +362,7 @@ static void catalogue_publish(void)
 
 /* --------------------------------------------------------------- telemetry */
 
-static int64_t s_next_due_us[M_DEFS];
+static int64_t s_next_due_us[MAX_METRICS];
 
 static void telemetry_reset(void)
 {
@@ -373,7 +372,7 @@ static void telemetry_reset(void)
 static void telemetry_poll(int64_t now)
 {
     bool any = false;
-    for (int i = 0; i < M_DEFS; i++) {
+    for (int i = 0; i < s_n; i++) {
         if (now >= s_next_due_us[i]) {
             any = true;
             break;
@@ -386,20 +385,21 @@ static void telemetry_poll(int64_t now)
     gw_add_time(root, true);
     cJSON_AddNumberToObject(root, "boot", gw_boot());
     cJSON *m = cJSON_AddObjectToObject(root, "metrics");
-    for (int i = 0; i < M_DEFS; i++) {
+    for (int i = 0; i < s_n; i++) {
         if (now < s_next_due_us[i]) {
             continue;
         }
-        s_next_due_us[i] = now + (int64_t)s_defs[i].period * 1000000;
-        if (i < M_COUNT) {
+        const metric_t *mt = &s_metrics[i];
+        s_next_due_us[i] = now + (int64_t)mt->def->period * 1000000;
+        if (!mt->family) {
             double v;
-            if (static_value(i, &v)) {
-                cJSON_AddNumberToObject(m, s_defs[i].name, v);
+            if (mt->fn(mt->ctx, &v)) {
+                cJSON_AddNumberToObject(m, mt->def->name, v);
             } else {
-                cJSON_AddNullToObject(m, s_defs[i].name);
+                cJSON_AddNullToObject(m, mt->def->name);
             }
         } else {
-            bool up = i == M_FAM_UP;
+            bool up = mt->family == 1;
             for (int t = 0; t < usage_topic_count(); t++) {
                 char name[80];
                 snprintf(name, sizeof(name), "%s%s", up ? FAM_UP_PREFIX : FAM_DOWN_PREFIX, usage_topic_name(t));
@@ -422,266 +422,6 @@ static void telemetry_poll(int64_t now)
         ESP_LOGI(TAG, "telemetry %u bytes: %.200s%s", (unsigned)len, json, len > 200 ? "..." : "");
     }
     free(json);
-}
-
-/* ------------------------------------------------------------------ monitor */
-
-typedef struct stream {
-    struct stream *next;
-    char session[65];
-    int n;
-    mref_t ref[MON_MAX_METRICS];
-    char *names[MON_MAX_METRICS];
-    int rate;
-    int64_t period_us;
-    int64_t next_us;          /* when the next sample is due */
-    int64_t deadline_us;      /* the stream ends here unless extended */
-    uint32_t index;           /* number of the next sample */
-    int count;                /* samples waiting in the batch */
-    uint32_t batch_index;     /* number of the batch's first sample */
-    int64_t batch_start_us;   /* when the batch's first sample was due */
-    double vals[MON_BATCH][MON_MAX_METRICS];
-} stream_t;
-
-/* Running streams. There is no fixed number of them: the budget is the only limit
- * (wiki Mower-Protocol §15); a stream costs one allocation. */
-static stream_t *s_streams;
-static SemaphoreHandle_t s_mon_lock;
-
-/* Unlinks and frees the stream that *link points to; *link then points to the next. */
-static void stream_remove(stream_t **link)
-{
-    stream_t *s = *link;
-    *link = s->next;
-    for (int i = 0; i < s->n; i++) {
-        free(s->names[i]);
-    }
-    free(s);
-}
-
-/* Caller holds s_mon_lock. */
-static int budget_used(void)
-{
-    int used = 0;
-    for (const stream_t *s = s_streams; s; s = s->next) {
-        used += s->n * s->rate;
-    }
-    return used;
-}
-
-static void fill_budget(cJSON *result)
-{
-    cJSON_AddNumberToObject(result, "budget", MONITOR_BUDGET);
-    cJSON_AddNumberToObject(result, "used", budget_used());
-}
-
-static bool valid_session(const char *id)
-{
-    size_t n = id ? strlen(id) : 0;
-    if (n < 1 || n > 64) {
-        return false;
-    }
-    for (size_t i = 0; i < n; i++) {
-        char c = id[i];
-        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool monitor_start(const cJSON *cmd, cJSON *result, const char **error, const char **message)
-{
-    const char *session = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "session"));
-    const cJSON *names = cJSON_GetObjectItem(cmd, "metrics");
-    const cJSON *rate_item = cJSON_GetObjectItem(cmd, "rate");
-    const cJSON *hold_item = cJSON_GetObjectItem(cmd, "hold");
-    bool ok = false;
-
-    xSemaphoreTake(s_mon_lock, portMAX_DELAY);
-    *error = "bad_request";
-    int n = cJSON_IsArray(names) ? cJSON_GetArraySize(names) : 0;
-    int rate = cJSON_IsNumber(rate_item) ? (int)cJSON_GetNumberValue(rate_item) : 0;
-    double hold = MON_HOLD_DEFAULT;
-    mref_t refs[MON_MAX_METRICS];
-
-    if (!valid_session(session)) {
-        *message = "session must be an id (1-64 chars of A-Za-z0-9_-)";
-    } else if (n < 1 || n > MON_MAX_METRICS) {
-        *message = "metrics must list 1 to 16 metric names";
-    } else if (!cJSON_IsNumber(rate_item) || rate != cJSON_GetNumberValue(rate_item)) {
-        *message = "rate must be a whole number of samples per second";
-    } else if (hold_item && (!cJSON_IsNumber(hold_item) ||
-                             (hold = cJSON_GetNumberValue(hold_item)) < 1 || hold > MON_HOLD_MAX)) {
-        *message = "hold must be 1 to 60 seconds";
-    } else {
-        bool names_ok = true;
-        int i = 0;
-        const cJSON *it;
-        cJSON_ArrayForEach(it, names) {
-            const char *name = cJSON_GetStringValue(it);
-            if (!name || !resolve(name, &refs[i])) {
-                *message = "unknown metric, or one that cannot be monitored (family names with * are not accepted)";
-                names_ok = false;
-                break;
-            }
-            for (int j = 0; j < i; j++) {
-                if (refs[j].type == refs[i].type && refs[j].idx == refs[i].idx) {
-                    *message = "a metric is listed twice";
-                    names_ok = false;
-                }
-            }
-            i++;
-        }
-        bool rate_ok = false;
-        for (size_t r = 0; r < N_RATES; r++) {
-            rate_ok = rate_ok || rate == s_rates[r];
-        }
-        if (names_ok && !rate_ok) {
-            *message = "a metric asked for does not offer this rate (1, 2, 5 or 10)";
-        } else if (names_ok) {
-            stream_t *s = s_streams;
-            while (s && strcmp(s->session, session) != 0) {
-                s = s->next;
-            }
-            int64_t now = esp_timer_get_time();
-            if (s) {
-                bool same = s->n == n && s->rate == rate;
-                for (int k = 0; same && k < n; k++) {
-                    same = s->ref[k].type == refs[k].type && s->ref[k].idx == refs[k].idx;
-                }
-                if (!same) {
-                    *message = "this session is running with other metrics or another rate";
-                } else {
-                    s->deadline_us = now + (int64_t)(hold * 1e6);   /* extends it, the sample index goes on */
-                    ok = true;
-                }
-            } else if (budget_used() + n * rate > MONITOR_BUDGET) {
-                *error = "over_budget";
-                *message = "the stream does not fit the budget of 100 values per second";
-            } else if (!(s = calloc(1, sizeof(*s)))) {
-                *error = "failed";
-                *message = "out of memory";
-            } else {
-                snprintf(s->session, sizeof(s->session), "%s", session);
-                s->n = n;
-                int k = 0;
-                cJSON_ArrayForEach(it, names) {
-                    s->names[k] = strdup(cJSON_GetStringValue(it));
-                    s->ref[k] = refs[k];
-                    k++;
-                }
-                s->rate = rate;
-                s->period_us = 1000000 / rate;
-                s->next_us = now;
-                s->deadline_us = now + (int64_t)(hold * 1e6);
-                s->next = s_streams;
-                s_streams = s;
-                ok = true;
-                ESP_LOGI(TAG, "monitor %s: %d metrics at %d/s for %.0f s", session, n, rate, hold);
-            }
-        }
-    }
-    fill_budget(result);
-    xSemaphoreGive(s_mon_lock);
-    return ok;
-}
-
-void monitor_stop(const cJSON *cmd, cJSON *result)
-{
-    const char *session = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "session"));
-    xSemaphoreTake(s_mon_lock, portMAX_DELAY);
-    stream_t **link = &s_streams;
-    while (*link) {
-        if (!session || strcmp((*link)->session, session) == 0) {
-            ESP_LOGI(TAG, "monitor %s stopped", (*link)->session);
-            stream_remove(link);
-        } else {
-            link = &(*link)->next;
-        }
-    }
-    fill_budget(result);
-    xSemaphoreGive(s_mon_lock);
-}
-
-static void stream_flush(stream_t *s, int64_t now)
-{
-    if (s->count == 0) {
-        return;
-    }
-    cJSON *msg = cJSON_CreateObject();
-    cJSON_AddStringToObject(msg, "session", s->session);
-    cJSON_AddNumberToObject(msg, "index", s->batch_index);
-    double wall = gw_time();
-    if (wall < 0) {
-        cJSON_AddNullToObject(msg, "time");
-    } else {
-        double t = wall - (double)(now - s->batch_start_us) / 1e6;
-        cJSON_AddNumberToObject(msg, "time", floor(t * 1000) / 1000);
-    }
-    cJSON_AddNumberToObject(msg, "rate", s->rate);
-    cJSON_AddItemToObject(msg, "metrics", cJSON_CreateStringArray((const char *const *)s->names, s->n));
-    cJSON *samples = cJSON_AddArrayToObject(msg, "samples");
-    for (int k = 0; k < s->count; k++) {
-        cJSON *row = cJSON_CreateArray();
-        for (int m = 0; m < s->n; m++) {
-            double v = s->vals[k][m];
-            cJSON_AddItemToArray(row, isnan(v) ? cJSON_CreateNull() : cJSON_CreateNumber(v));
-        }
-        cJSON_AddItemToArray(samples, row);
-    }
-    char *json = cJSON_PrintUnformatted(msg);
-    cJSON_Delete(msg);
-    if (json) {
-        mqtt_link_publish(MQTT_SCOPE_GATEWAY, "monitor", json, 0, 0, false);
-        free(json);
-    }
-    s->count = 0;
-}
-
-static void monitor_tick(int64_t now)
-{
-    xSemaphoreTake(s_mon_lock, portMAX_DELAY);
-    bool lost = gw_link_get() & GW_SERVER_LOST;
-    for (stream_t **link = &s_streams; *link;) {
-        stream_t *s = *link;
-        if (lost || now > s->deadline_us) {
-            ESP_LOGI(TAG, "monitor %s ended (%s)", s->session, lost ? "server link lost" : "hold ran out");
-            stream_remove(link);
-            continue;
-        }
-        link = &s->next;
-        if (!mqtt_link_connected()) {
-            s->next_us = now;   /* nothing is kept back for later */
-            s->count = 0;
-            continue;
-        }
-        if (now - s->next_us > 1000000) {
-            s->next_us = now;   /* a long stall: do not replay it */
-            s->count = 0;
-        }
-        while (now >= s->next_us) {
-            if (s->count == 0) {
-                s->batch_index = s->index;
-                s->batch_start_us = s->next_us;
-            }
-            for (int m = 0; m < s->n; m++) {
-                double v;
-                s->vals[s->count][m] = ref_value(s->ref[m], &v) ? v : NAN;
-            }
-            s->count++;
-            s->index++;
-            s->next_us += s->period_us;
-            if (s->count == MON_BATCH) {
-                stream_flush(s, now);
-            }
-        }
-        /* one message per 0.2 s of samples, or per sample when they are further apart */
-        if (s->count > 0 && (s->count * s->period_us >= MON_FLUSH_US || now - s->batch_start_us >= 2 * MON_FLUSH_US)) {
-            stream_flush(s, now);
-        }
-    }
-    xSemaphoreGive(s_mon_lock);
 }
 
 /* ------------------------------------------------------------------- tasks */
@@ -723,8 +463,12 @@ static void signal_task(void *arg)
 
 void metrics_start(void)
 {
-    s_mon_lock = xSemaphoreCreateMutex();
-    if (!s_mon_lock || xTaskCreate(tick_task, "gw_tick", 6144, NULL, 3, NULL) != pdPASS ||
+    for (int i = 0; i < SYS_COUNT; i++) {
+        metrics_register(&s_sys_defs[i], sys_read, (void *)(intptr_t)i);
+    }
+    add(&s_fam_up, NULL, NULL, 1);
+    add(&s_fam_down, NULL, NULL, 2);
+    if (monitor_init() != ESP_OK || xTaskCreate(tick_task, "gw_tick", 6144, NULL, 3, NULL) != pdPASS ||
             xTaskCreate(signal_task, "gw_signal", 4096, NULL, 2, NULL) != pdPASS) {
         ESP_LOGE(TAG, "could not start the publisher tasks");
     }

@@ -13,6 +13,8 @@
 #include "esp_modem_api.h"
 #include "board.h"
 #include "gw_link.h"
+#include "gwstate.h"
+#include "metrics.h"
 #include "usage.h"
 #include "sdkconfig.h"
 
@@ -24,9 +26,26 @@ static const char *TAG = "cell";
 static EventGroupHandle_t s_ev;
 static esp_modem_dce_t *s_dce;
 static int s_rssi = 99;
-static char s_operator[8];   /* MCC+MNC of the network in use, "" until registered */
 /* One user of the modem's command channel at a time: redial vs. AT sessions. */
 static SemaphoreHandle_t s_lock;
+
+/* The modem's signal can only be read with PPP paused, about once a minute, so it
+ * offers no monitor rates. */
+static const metric_def_t s_signal_def = { .name = "signal.rssi", .key = "signal.strength",
+    .label = "Signal strength",
+    .description = "Received signal strength of the mobile connection. Read once a minute.",
+    .unit = "dBm", .part = "signal", .period = 60, .chart = true,
+    .has_min = true, .min = -120, .has_max = true, .max = -50, .has_low = true, .low = -100, .decimals = 0 };
+
+static bool read_signal(void *ctx, double *v)
+{
+    int csq = s_rssi;
+    if (csq == 99) {
+        return false;
+    }
+    *v = -113 + 2 * csq;
+    return true;
+}
 
 static void on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -88,26 +107,26 @@ static bool wait_registered(int seconds)
     return false;
 }
 
-/* The operator's network code (wiki Mower-Protocol §6.2): AT+COPS in numeric
- * format answers +COPS: 0,2,"24601",7. Command mode only. */
+/* The operator's network code (wiki Mower-Protocol §6.2) for gateway/state:
+ * AT+COPS in numeric format answers +COPS: 0,2,"24601",7. Command mode only. */
 static void read_operator_code(void)
 {
     char out[CONFIG_ESP_MODEM_C_API_STR_MAX] = {0};
-    s_operator[0] = '\0';
-    if (esp_modem_at(s_dce, "AT+COPS=3,2", NULL, 2000) != ESP_OK ||
-            esp_modem_at(s_dce, "AT+COPS?", out, 2000) != ESP_OK) {
-        return;
+    char code[8] = "";   /* MCC+MNC */
+    const char *q = NULL;
+    if (esp_modem_at(s_dce, "AT+COPS=3,2", NULL, 2000) == ESP_OK &&
+            esp_modem_at(s_dce, "AT+COPS?", out, 2000) == ESP_OK) {
+        q = strchr(out, '"');
     }
-    const char *q = strchr(out, '"');
-    if (!q) {
-        return;
+    if (q) {
+        size_t n = 0;
+        for (q++; q[n] >= '0' && q[n] <= '9' && n < sizeof(code) - 1; n++) {
+            code[n] = q[n];
+        }
+        code[n] = '\0';
+        ESP_LOGI(TAG, "operator code %s", code);
     }
-    size_t n = 0;
-    for (q++; q[n] >= '0' && q[n] <= '9' && n < sizeof(s_operator) - 1; n++) {
-        s_operator[n] = q[n];
-    }
-    s_operator[n] = '\0';
-    ESP_LOGI(TAG, "operator code %s", s_operator);
+    gw_state_set("operator", code[0] ? code : NULL);
 }
 
 /* Command mode -> registered -> ATD; waits for the IP. */
@@ -174,6 +193,7 @@ esp_err_t cell_start(int timeout_ms)
 {
     s_ev = xEventGroupCreate();
     s_lock = xSemaphoreCreateMutex();
+    metrics_register(&s_signal_def, read_signal, NULL);
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, on_ip, NULL));
 
     esp_modem_dte_config_t dte = ESP_MODEM_DTE_DEFAULT_CONFIG();
@@ -222,11 +242,6 @@ bool cell_is_up(void)
 int cell_last_rssi(void)
 {
     return s_rssi;
-}
-
-const char *cell_operator(void)
-{
-    return s_operator;
 }
 
 static esp_err_t nothing(void *ctx)
