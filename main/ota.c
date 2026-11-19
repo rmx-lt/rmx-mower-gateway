@@ -15,6 +15,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "psa/crypto.h"
+#include "fw_chunk.h"
 #include "cell.h"
 #include "gwstate.h"
 #include "mqtt_link.h"
@@ -45,30 +46,14 @@ static void new_request_id(char buf[REQUEST_ID_LEN + 1])
  * already written with esp_ota_write stay, so a retry resumes at that chunk. */
 #define CHUNK_TRIES     6   /* the request and 5 repeats */
 #define CHUNK_WAIT_MS   10000
-#define CHUNK_MAX       4096
 #define ID_LEN          64
 #define FILE_LEN        128
 #define VERSION_LEN     32
-#define FW_HDR_LEN      64
-#define FW_MAX_FRAME    (FW_HDR_LEN + 16384)
+#define FW_MAX_FRAME    (FW_CHUNK_HDR_LEN + 16384)
 
 #define APP_DESC_BYTES  (sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t))
 
-typedef struct __attribute__((packed)) {
-    char magic[4];
-    uint8_t version;
-    uint8_t flags;
-    uint16_t header_len;
-    uint32_t chunk_index;
-    uint32_t chunk_count;
-    uint32_t image_size;
-    uint16_t chunk_len;
-    uint16_t reserved;
-    uint8_t request_id_hash[8];
-    uint8_t sha256[32];
-} rmx_fw_hdr_t;
-
-_Static_assert(sizeof(rmx_fw_hdr_t) == FW_HDR_LEN, "firmware chunk header is 64 bytes");
+/* The 64-byte chunk header (§12.2) is parsed by components/rmx_codec (fw_chunk_parse, host-tested). */
 
 typedef struct {
     char id[ID_LEN + 1];
@@ -167,29 +152,6 @@ static bool sha256_id(const char *rid, uint8_t out[8])
     return true;
 }
 
-/* False when the frame is not ours or not a version-1 header. Payload points
- * into data. */
-static bool parse_frame(const uint8_t *data, size_t len, const uint8_t expect_hash[8],
-                        rmx_fw_hdr_t *hdr, const uint8_t **payload)
-{
-    if (len < FW_HDR_LEN) {
-        return false;
-    }
-    memcpy(hdr, data, FW_HDR_LEN);
-    if (memcmp(hdr->magic, "RMFW", 4) != 0 || hdr->version != 1 || hdr->flags != 0x01 ||
-            hdr->header_len != FW_HDR_LEN || hdr->reserved != 0) {
-        return false;
-    }
-    if (len != FW_HDR_LEN + (size_t)hdr->chunk_len || hdr->chunk_len > CHUNK_MAX) {
-        return false;
-    }
-    if (memcmp(hdr->request_id_hash, expect_hash, 8) != 0) {
-        return false;
-    }
-    *payload = data + FW_HDR_LEN;
-    return true;
-}
-
 static bool parse_fw_error(const uint8_t *data, size_t len, const char *rid,
                            char *code, size_t code_len, char *msg, size_t msg_len)
 {
@@ -219,7 +181,7 @@ typedef enum {
 /* Waits for the chunk with this request id, or a JSON error for it.
  * On RX_CHUNK the caller frees *frame. */
 static rx_kind_t wait_chunk(const char *rid, const uint8_t expect_hash[8], int timeout_ms,
-                            uint8_t **frame, size_t *frame_len,
+                            uint8_t **frame, fw_chunk_hdr_t *hdr, const uint8_t **payload,
                             char *err_code, size_t err_code_len, char *err_msg, size_t err_msg_len)
 {
     int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
@@ -240,15 +202,11 @@ static rx_kind_t wait_chunk(const char *rid, const uint8_t expect_hash[8], int t
             }
             continue;
         }
-        rmx_fw_hdr_t hdr;
-        const uint8_t *payload = NULL;
-        bool ours = parse_frame(m.data, m.len, expect_hash, &hdr, &payload);
-        if (!ours) {
-            free(m.data);
+        if (!fw_chunk_parse(m.data, m.len, expect_hash, hdr, payload)) {
+            free(m.data);   /* not ours, or not a version-1 header */
             continue;
         }
         *frame = m.data;
-        *frame_len = m.len;
         return RX_CHUNK;
     }
 }
@@ -262,7 +220,7 @@ static bool link_up(int attempt)
     return cell_wait_ip(120000) && mqtt_link_wait_ready(90000);
 }
 
-static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len)
+static bool fetch_chunk(uint32_t index, uint8_t **frame, fw_chunk_hdr_t *hdr, const uint8_t **payload)
 {
     for (int attempt = 0; attempt < CHUNK_TRIES; attempt++) {
         if (attempt > 0) {
@@ -287,7 +245,7 @@ static bool fetch_chunk(uint32_t index, uint8_t **frame, size_t *frame_len)
         }
         char code[24];
         char message[96];
-        rx_kind_t kind = wait_chunk(rid, expect, CHUNK_WAIT_MS, frame, frame_len,
+        rx_kind_t kind = wait_chunk(rid, expect, CHUNK_WAIT_MS, frame, hdr, payload,
                                     code, sizeof(code), message, sizeof(message));
         if (kind == RX_CHUNK) {
             return true;
@@ -360,8 +318,9 @@ static void ota_task(void *arg)
 
     for (uint32_t index = 0; !have_meta || index < chunk_count; index++) {
         uint8_t *frame = NULL;
-        size_t frame_len = 0;
-        if (!fetch_chunk(index, &frame, &frame_len)) {
+        fw_chunk_hdr_t hdr;
+        const uint8_t *payload = NULL;
+        if (!fetch_chunk(index, &frame, &hdr, &payload)) {
             if (handle) {
                 esp_ota_abort(handle);
             }
@@ -370,9 +329,6 @@ static void ota_task(void *arg)
             }
             finish_task();
         }
-        rmx_fw_hdr_t hdr;
-        memcpy(&hdr, frame, FW_HDR_LEN);
-        const uint8_t *payload = frame + FW_HDR_LEN;
 
         if (hdr.chunk_index != index) {
             free(frame);
