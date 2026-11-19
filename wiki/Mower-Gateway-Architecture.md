@@ -310,7 +310,7 @@ components/
   rmx_codec/              pure C99 + include/; CMakeLists with no IDF REQUIRES
   board_link/             new (#62): board_link.c, bl_uart.c, relay
   ntrip/                  new (#63)
-test/host/                Unity tests of rmx_codec, run on the PC and in CI
+test/                     Unity tests of rmx_codec (test_<name>/), run on the PC and in CI
 ```
 
 No big-bang move of the existing modules: a module moves to `components/` only when a step rewrites it. Host test runner: PlatformIO's `native` env (`pio test -e native`, Unity, `lib_extra_dirs = components` with a `library.json` in `rmx_codec`), chosen in [rmx-mower-gateway#74](https://github.com/rmx-lt/rmx-mower-gateway/issues/74) because PlatformIO is already the main tool; tests sit in `test/test_<name>/`, the `host-tests` workflow runs them on every PR. The ESP-IDF `linux` target is not needed while L2 stays free of FreeRTOS.
