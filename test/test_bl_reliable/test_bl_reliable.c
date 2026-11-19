@@ -120,6 +120,72 @@ static void test_rx_reset_after_peer_restart(void)
     TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 1));
 }
 
+/* Peer restart detection with the heartbeat's boot byte (Mower-Protocol §14.4). */
+static void test_boot_first_heartbeat_only_records(void)
+{
+    bl_rel_rx_t r;
+    bl_rel_rx_init(&r);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 1));
+    TEST_ASSERT_FALSE(bl_rel_rx_peer_boot(&r, 42));   /* first heartbeat: nothing to compare with */
+    TEST_ASSERT_FALSE(bl_rel_rx_accept(&r, 1));       /* last number kept: still a repeat */
+}
+
+static void test_boot_change_resets(void)
+{
+    bl_rel_rx_t r;
+    bl_rel_rx_init(&r);
+    bl_rel_rx_peer_boot(&r, 7);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 1));
+    TEST_ASSERT_TRUE(bl_rel_rx_peer_boot(&r, 8));     /* the peer restarted */
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 1));        /* its new frame 1 is passed on */
+    bl_rel_rx_peer_boot(&r, 255);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 1));
+    TEST_ASSERT_TRUE(bl_rel_rx_peer_boot(&r, 0));     /* the byte wraps like the counter */
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 1));
+}
+
+static void test_boot_same_value_keeps(void)
+{
+    bl_rel_rx_t r;
+    bl_rel_rx_init(&r);
+    bl_rel_rx_peer_boot(&r, 7);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 3));
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_FALSE(bl_rel_rx_peer_boot(&r, 7));
+    }
+    TEST_ASSERT_FALSE(bl_rel_rx_accept(&r, 3));       /* a resend is still a repeat */
+}
+
+static void test_boot_lost_heartbeats_keep(void)
+{
+    /* heartbeats 2..4 lost (fewer than 3 s: the link stays up): no call, nothing changes */
+    bl_rel_rx_t r;
+    bl_rel_rx_init(&r);
+    bl_rel_rx_peer_boot(&r, 9);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, 5));
+    TEST_ASSERT_FALSE(bl_rel_rx_accept(&r, 5));
+    TEST_ASSERT_FALSE(bl_rel_rx_peer_boot(&r, 9));    /* heartbeat 5 arrives, same boot */
+    TEST_ASSERT_FALSE(bl_rel_rx_accept(&r, 5));
+}
+
+static void test_boot_quick_restart_end_to_end(void)
+{
+    /* The peer restarts faster than the 3 s timeout and sends a heartbeat before
+     * its first reliable frame (the #62 contract): frame 1 of the new boot gets through. */
+    bl_rel_tx_t peer;
+    bl_rel_rx_t r;
+    bl_rel_tx_init(&peer);
+    bl_rel_rx_init(&r);
+    bl_rel_rx_peer_boot(&r, 20);
+    uint8_t s = bl_rel_tx_start(&peer, 0);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, s));
+    bl_rel_tx_init(&peer);                            /* restart: numbers from 1 again */
+    TEST_ASSERT_TRUE(bl_rel_rx_peer_boot(&r, 21));    /* heartbeat first */
+    s = bl_rel_tx_start(&peer, 1000);
+    TEST_ASSERT_EQUAL_UINT8(1, s);
+    TEST_ASSERT_TRUE(bl_rel_rx_accept(&r, s));
+}
+
 /* Both ends together over a link that loses frames. */
 static void test_lossy_link_end_to_end(void)
 {
@@ -173,6 +239,11 @@ int main(void)
     RUN_TEST(test_rx_repeats);
     RUN_TEST(test_rx_out_of_order_is_new);
     RUN_TEST(test_rx_reset_after_peer_restart);
+    RUN_TEST(test_boot_first_heartbeat_only_records);
+    RUN_TEST(test_boot_change_resets);
+    RUN_TEST(test_boot_same_value_keeps);
+    RUN_TEST(test_boot_lost_heartbeats_keep);
+    RUN_TEST(test_boot_quick_restart_end_to_end);
     RUN_TEST(test_lossy_link_end_to_end);
     return UNITY_END();
 }

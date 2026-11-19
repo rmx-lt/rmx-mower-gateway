@@ -6,7 +6,13 @@
  * after 200 ms without an ACK, up to 5 times; then drop and count. One counter
  * covers every reliable type (QoS 1 PUBLISH/MESSAGE and SUBSCRIBE).
  * Receiver: a frame with the same number as the last one taken is a repeat
- * (ACK it again, do not pass it on); any other number is new. */
+ * (ACK it again, do not pass it on); any other number is new. It forgets the
+ * last number when the peer restarts (the boot byte of its heartbeat changes,
+ * bl_rel_rx_peer_boot) and when the link goes down (bl_rel_rx_reset).
+ *
+ * Contract for the task that owns the link (rmx-mower-gateway#62): after the
+ * board starts, send a HEARTBEAT before the first reliable frame, so the peer
+ * has seen the new boot byte before it gets a frame numbered from 1 again. */
 #pragma once
 
 #include <stdbool.h>
@@ -44,11 +50,17 @@ void bl_rel_tx_abort(bl_rel_tx_t *t);
 
 typedef struct {
     uint8_t last;         /* 0 = nothing taken since init or reset */
+    bool have_boot;       /* a heartbeat from the peer was seen since init */
+    uint8_t peer_boot;    /* its boot byte */
 } bl_rel_rx_t;
 
 void bl_rel_rx_init(bl_rel_rx_t *r);
 /* A reliable frame with number seq (1..255) arrived. True: new, pass it on.
  * False: a repeat (or seq 0). ACK it in both cases. */
 bool bl_rel_rx_accept(bl_rel_rx_t *r, uint8_t seq);
-/* Forget the last number, e.g. when the link goes down (heartbeat lost). */
+/* Forget the last number: call when the link goes down (3 s without a heartbeat). */
 void bl_rel_rx_reset(bl_rel_rx_t *r);
+/* Call with the boot byte of every heartbeat from the peer (§14.4). True when
+ * it differs from the last one seen: the peer restarted and the last number is
+ * forgotten. The first heartbeat after init only records the value. */
+bool bl_rel_rx_peer_boot(bl_rel_rx_t *r, uint8_t boot);

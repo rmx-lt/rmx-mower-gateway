@@ -60,6 +60,8 @@ void bl_rel_tx_abort(bl_rel_tx_t *t)
 void bl_rel_rx_init(bl_rel_rx_t *r)
 {
     r->last = 0;
+    r->have_boot = false;
+    r->peer_boot = 0;
 }
 
 bool bl_rel_rx_accept(bl_rel_rx_t *r, uint8_t seq)
@@ -74,4 +76,15 @@ bool bl_rel_rx_accept(bl_rel_rx_t *r, uint8_t seq)
 void bl_rel_rx_reset(bl_rel_rx_t *r)
 {
     r->last = 0;
+}
+
+bool bl_rel_rx_peer_boot(bl_rel_rx_t *r, uint8_t boot)
+{
+    bool restarted = r->have_boot && boot != r->peer_boot;
+    r->have_boot = true;
+    r->peer_boot = boot;
+    if (restarted) {
+        r->last = 0;
+    }
+    return restarted;
 }

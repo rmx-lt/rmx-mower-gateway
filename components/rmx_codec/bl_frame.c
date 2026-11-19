@@ -214,6 +214,7 @@ size_t bl_hb_gw_encode(const bl_hb_gw_t *h, uint8_t *out, size_t cap)
     }
     out[6] = (uint8_t)(h->ms & 0xFF);
     out[7] = (uint8_t)(h->ms >> 8);
+    out[8] = h->boot;
     return BL_HB_GW_LEN;
 }
 
@@ -226,24 +227,27 @@ bl_err_t bl_hb_gw_parse(const uint8_t *body, size_t len, bl_hb_gw_t *h)
     h->flags = body[1];
     h->unix_s = (uint32_t)body[2] | ((uint32_t)body[3] << 8) | ((uint32_t)body[4] << 16) | ((uint32_t)body[5] << 24);
     h->ms = (uint16_t)(body[6] | (body[7] << 8));
+    h->boot = body[8];
     return BL_OK;
 }
 
-size_t bl_hb_ap_encode(uint8_t version, uint8_t *out, size_t cap)
+size_t bl_hb_ap_encode(const bl_hb_ap_t *h, uint8_t *out, size_t cap)
 {
     if (cap < BL_HB_AP_LEN) {
         return 0;
     }
-    out[0] = version;
-    out[1] = 0;
+    out[0] = h->version;
+    out[1] = 0;   /* reserved */
+    out[2] = h->boot;
     return BL_HB_AP_LEN;
 }
 
-bl_err_t bl_hb_ap_parse(const uint8_t *body, size_t len, uint8_t *version)
+bl_err_t bl_hb_ap_parse(const uint8_t *body, size_t len, bl_hb_ap_t *h)
 {
     if (len < BL_HB_AP_LEN) {
         return BL_ERR_BODY;
     }
-    *version = body[0];
+    h->version = body[0];
+    h->boot = body[2];
     return BL_OK;
 }

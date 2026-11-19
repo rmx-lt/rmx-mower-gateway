@@ -105,7 +105,8 @@ bl_err_t bl_subscribe_parse(const uint8_t *body, size_t len, uint8_t *seq, bl_su
 /* ACK (§14.2): one byte, the sequence number 1..255. */
 bl_err_t bl_ack_parse(const uint8_t *body, size_t len, uint8_t *seq);
 
-/* HEARTBEAT (§14.4). */
+/* HEARTBEAT (§14.4). Both bodies end with the low byte of the sender's boot
+ * counter (§4.1); feed it to bl_rel_rx_peer_boot() (bl_reliable.h). */
 #define BL_HB_MQTT          0x01
 #define BL_HB_SERVER        0x02
 #define BL_HB_CORRECTIONS   0x04
@@ -117,14 +118,21 @@ typedef struct {
     uint8_t flags;
     uint32_t unix_s;     /* 0 when the clock is not valid */
     uint16_t ms;
+    uint8_t boot;        /* low byte of the gateway's boot counter */
 } bl_hb_gw_t;
 
-#define BL_HB_GW_LEN 8
-#define BL_HB_AP_LEN 2
+typedef struct {
+    uint8_t version;
+    uint8_t boot;        /* low byte of the autopilot's boot counter */
+} bl_hb_ap_t;
+
+#define BL_HB_GW_LEN 9
+#define BL_HB_AP_LEN 3
 
 size_t bl_hb_gw_encode(const bl_hb_gw_t *h, uint8_t *out, size_t cap);
-/* At least 8 bytes; extra bytes are ignored. The version is returned, not
+/* At least 9 bytes; extra bytes are ignored. The version is returned, not
  * checked: the caller keeps the link down on an unknown one. */
 bl_err_t bl_hb_gw_parse(const uint8_t *body, size_t len, bl_hb_gw_t *h);
-size_t bl_hb_ap_encode(uint8_t version, uint8_t *out, size_t cap);
-bl_err_t bl_hb_ap_parse(const uint8_t *body, size_t len, uint8_t *version);
+size_t bl_hb_ap_encode(const bl_hb_ap_t *h, uint8_t *out, size_t cap);
+/* At least 3 bytes (version, reserved, boot); the reserved byte and extra bytes are ignored. */
+bl_err_t bl_hb_ap_parse(const uint8_t *body, size_t len, bl_hb_ap_t *h);

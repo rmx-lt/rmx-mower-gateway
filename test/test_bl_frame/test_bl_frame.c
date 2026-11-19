@@ -263,24 +263,32 @@ static void test_ack(void)
 static void test_heartbeats(void)
 {
     bl_hb_gw_t h = { .version = 1, .flags = BL_HB_MQTT | BL_HB_CLOCK | BL_HB_SUBS_NEEDED,
-                     .unix_s = 1794650000u, .ms = 250 };
-    uint8_t b[8];
-    TEST_ASSERT_EQUAL_size_t(8, bl_hb_gw_encode(&h, b, sizeof(b)));
-    const uint8_t want[8] = { 1, 0x19, 0x90, 0x2F, 0xF8, 0x6A, 0xFA, 0x00 };   /* 1794650000 = 0x6AF82F90 LE */
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(want, b, 8);
+                     .unix_s = 1794650000u, .ms = 250, .boot = 0xA7 };
+    uint8_t b[10];
+    TEST_ASSERT_EQUAL_size_t(0, bl_hb_gw_encode(&h, b, 8));
+    TEST_ASSERT_EQUAL_size_t(9, bl_hb_gw_encode(&h, b, sizeof(b)));
+    const uint8_t want[9] = { 1, 0x19, 0x90, 0x2F, 0xF8, 0x6A, 0xFA, 0x00, 0xA7 };   /* 1794650000 = 0x6AF82F90 LE; boot at offset 8 */
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(want, b, 9);
     bl_hb_gw_t p;
-    TEST_ASSERT_EQUAL(BL_OK, bl_hb_gw_parse(b, 8, &p));
+    TEST_ASSERT_EQUAL(BL_OK, bl_hb_gw_parse(b, 9, &p));
     TEST_ASSERT_EQUAL_UINT32(1794650000u, p.unix_s);
     TEST_ASSERT_EQUAL_UINT16(250, p.ms);
     TEST_ASSERT_EQUAL_HEX8(0x19, p.flags);
-    TEST_ASSERT_EQUAL(BL_ERR_BODY, bl_hb_gw_parse(b, 7, &p));
+    TEST_ASSERT_EQUAL_HEX8(0xA7, p.boot);
+    TEST_ASSERT_EQUAL(BL_ERR_BODY, bl_hb_gw_parse(b, 8, &p));   /* the pre-boot 8-byte body is too short */
+    b[9] = 0x55;
+    TEST_ASSERT_EQUAL(BL_OK, bl_hb_gw_parse(b, 10, &p));        /* extra bytes ignored */
     h.ms = 1000;
     TEST_ASSERT_EQUAL_size_t(0, bl_hb_gw_encode(&h, b, sizeof(b)));
-    uint8_t v;
-    TEST_ASSERT_EQUAL_size_t(2, bl_hb_ap_encode(1, b, sizeof(b)));
-    TEST_ASSERT_EQUAL(BL_OK, bl_hb_ap_parse(b, 2, &v));
-    TEST_ASSERT_EQUAL_UINT8(1, v);
-    TEST_ASSERT_EQUAL(BL_ERR_BODY, bl_hb_ap_parse(b, 1, &v));
+    bl_hb_ap_t a = { .version = 1, .boot = 0x03 }, ap;
+    TEST_ASSERT_EQUAL_size_t(3, bl_hb_ap_encode(&a, b, sizeof(b)));
+    const uint8_t want_ap[3] = { 1, 0, 0x03 };                  /* reserved byte kept, boot at offset 2 */
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(want_ap, b, 3);
+    b[1] = 0x77;                                                /* reserved is not checked */
+    TEST_ASSERT_EQUAL(BL_OK, bl_hb_ap_parse(b, 3, &ap));
+    TEST_ASSERT_EQUAL_UINT8(1, ap.version);
+    TEST_ASSERT_EQUAL_UINT8(0x03, ap.boot);
+    TEST_ASSERT_EQUAL(BL_ERR_BODY, bl_hb_ap_parse(b, 2, &ap));
 }
 
 int main(void)
