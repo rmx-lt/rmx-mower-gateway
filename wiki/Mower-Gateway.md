@@ -188,7 +188,7 @@ that frame arrives in one event; a fragmented `MQTT_EVENT_DATA` is still reassem
 
 ```
 main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, ota, gwstate (boot, state),
-             metrics (catalogue, telemetry, monitor), usage (data counters)
+             metrics (catalogue, telemetry, monitor), usage (data counters); see Mower-Gateway-Architecture
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
              mqtt_cmd.ps1 (remote commands), mqtt_watch.ps1 (read the gateway topics), release.ps1 (signed OTA release)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release

@@ -11,7 +11,8 @@ Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4
 | 03 | [Mower-Gateway-ESP-IDF-Environment](Mower-Gateway-ESP-IDF-Environment) | toolchain paths, build/flash commands, IDF v6 changes, sdkconfig for this board |
 | 04 | [Mower-Gateway-PPP](Mower-Gateway-PPP) | esp_modem + PPP: correct DTE config, startup sequence, CMUX, robustness |
 | 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, firmware chunks |
-| 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the gateway firmware), firmware layout, decisions, risks |
+| 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the gateway firmware), decisions, risks |
+| 07 | [Mower-Gateway-Architecture](Mower-Gateway-Architecture) | firmware modules, tasks, dependencies; target architecture and refactor steps before the board link and NTRIP |
 | — | [Mower-Gateway-Sources](Mower-Gateway-Sources) | where every fact came from (local repos, PDFs, web) |
 | — | [Mower-Gateway-Tools](Mower-Gateway-Tools) | AT bridge firmware, AT script, PPP smoke test |
 
