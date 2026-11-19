@@ -313,7 +313,7 @@ components/
 test/host/                Unity tests of rmx_codec, run on the PC and in CI
 ```
 
-No big-bang move of the existing modules: a module moves to `components/` only when a step rewrites it. Host test runner: PlatformIO `native` env (one tool, `pio test -e native`) or plain CMake + Unity; [rmx-mower-gateway#74](https://github.com/rmx-lt/rmx-mower-gateway/issues/74) picks the one that builds `rmx_codec` without the IDF and records it here. The ESP-IDF `linux` target is not needed while L2 stays free of FreeRTOS.
+No big-bang move of the existing modules: a module moves to `components/` only when a step rewrites it. Host test runner: PlatformIO's `native` env (`pio test -e native`, Unity, `lib_extra_dirs = components` with a `library.json` in `rmx_codec`), chosen in [rmx-mower-gateway#74](https://github.com/rmx-lt/rmx-mower-gateway/issues/74) because PlatformIO is already the main tool; tests sit in `test/test_<name>/`, the `host-tests` workflow runs them on every PR. The ESP-IDF `linux` target is not needed while L2 stays free of FreeRTOS.
 
 ## 7. Conventions (Proposal)
 
