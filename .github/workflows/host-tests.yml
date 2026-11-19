@@ -1,0 +1,24 @@
+# Host unit tests of components/rmx_codec (pure C, no ESP-IDF): pio test -e native.
+# Why: the codecs (firmware chunks, later the board link frames) are tested on
+# every PR without a board. See wiki Mower-Gateway-Architecture §6.
+name: host-tests
+
+on:
+  pull_request:
+    branches: [development]
+  push:
+    branches: [development]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install platformio==6.2.0
+      - run: pio test -e native

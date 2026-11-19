@@ -48,6 +48,7 @@ $pio = "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe"
 & $pio run -e gateway                  # build + sign (needs keys\ota_signing_key.pem)
 & $pio run -e gateway -t menuconfig    # "rmx gateway": APN, broker URL (no logins, no passwords)
 & $pio run -e gateway -t upload        # flash on COM6
+& $pio test -e native                  # host unit tests of components/rmx_codec (needs gcc on PATH; CI runs them on every PR)
 tools\provision_cert.ps1 -Name mower-02   # new board: CSR with that name, sign it, store the certificate (wiki Device-CA)
 python -I -u tools\serial_log.py COM6 120 --until STARTUP
 ```
@@ -192,6 +193,8 @@ main/        the firmware: board, cell (esp_modem PPP), mqtt_link, remote_cmd, o
 tools/       at_bridge (AT console firmware), at_session.py (AT script), ppp_smoke (PPP + TLS test),
              mqtt_cmd.ps1 (remote commands), mqtt_watch.ps1 (read the gateway topics), release.ps1 (signed OTA release)
 version.txt  firmware version (PROJECT_VER), bump it for every OTA release
+components/  rmx_codec: pure C codecs (firmware chunk header), no ESP-IDF includes, host-tested
+test/        Unity host tests (pio test -e native, workflow host-tests)
 certs/       ISRG Root X1/X2 PEMs (public CA roots for rmx.lt's Let's Encrypt chain)
 ```
 
