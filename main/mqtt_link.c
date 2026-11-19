@@ -175,7 +175,8 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         } else {
             ESP_LOGE(TAG, "error type %d, tls esp_err 0x%x, mbedtls -0x%x, sock errno %d",
                      e->error_handle->error_type, e->error_handle->esp_tls_last_esp_err,
-                     -e->error_handle->esp_tls_stack_err, e->error_handle->esp_transport_sock_errno);
+                     e->error_handle->esp_tls_stack_err,   /* esp-tls stores -ret: already positive */
+                     e->error_handle->esp_transport_sock_errno);
         }
         break;
     default:
