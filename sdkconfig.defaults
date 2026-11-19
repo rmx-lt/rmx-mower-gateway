@@ -45,3 +45,6 @@ CONFIG_SECURE_BOOT_SIGNING_KEY="keys/ota_signing_key.pem"
 # Processor load for the system.cpu metrics (main/metrics.c): idle task run time
 CONFIG_FREERTOS_USE_TRACE_FACILITY=y
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+# TLS checks certificate "valid from"/"valid to" (off by default in ESP-IDF).
+# Needs a set clock: app_main starts MQTT only after SNTP (issue 18).
+CONFIG_MBEDTLS_HAVE_TIME_DATE=y

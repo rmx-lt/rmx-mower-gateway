@@ -63,6 +63,28 @@ PC sender: `tools/mqtt_cmd.ps1` (login `app`, the backend role, via `mosquitto_r
 - Errors: `bad_request`, `unknown_cmd`, `expired`, `no_clock`, `failed`. Duplicate ids (QoS 1 redelivery; last 8 kept) are ignored without a reply.
 - `expires_at` (unix s, optional): refused when past, or when the clock isn't set. The clock comes
   from SNTP (`pool.ntp.org`) over PPP right after boot (worked first try, < 4 s).
+
+### Certificate dates
+
+Verified on the board 2026-11-19 (issue 18, firmware 0.4.0 tree + this change):
+
+- mbedTLS checks the broker certificate's "valid from"/"valid to" (`CONFIG_MBEDTLS_HAVE_TIME_DATE=y`).
+  Before 2026-11-19 it was off (the ESP-IDF default), so dates were never checked.
+- `app_main` starts MQTT/TLS only after SNTP has set the clock: it retries `esp_netif_sntp_sync_wait`
+  every 15 s and restarts (like the no-data path) after 2 min without time. That path (NTP blocked) is not
+  tested on the board.
+- Test option `CONFIG_GATEWAY_TEST_CLOCK_SHIFT_DAYS` (default 0; never ship non-zero): after the first sync it
+  stops SNTP and moves the clock. Clock +3650 days (2036, broker certificate expired) and −3650 days (2016,
+  not yet valid) both fail every connect attempt:
+  ```
+  W gateway: TEST: clock shifted by 3650 days to 2110482051
+  E esp-tls-mbedtls: mbedtls_ssl_handshake returned -0x2700   (MBEDTLS_ERR_X509_CERT_VERIFY_FAILED)
+  E mqtt: error type 1, tls esp_err 0x801a, mbedtls -0x2700, sock errno 0
+  E gateway: mqtt connect: FAIL
+  ```
+  The same build with shift 0: `clock set by SNTP`, `connected as mower-01 in 3635 ms`.
+- esp-tls does not report which date failed: the verify flags stay 0 because it finds no peer certificate
+  after the failed handshake. The A/B (shift vs. no shift, same image) shows the date is the cause.
 - Measured PC → device → PC round trip (incl. a fresh TLS connect of `mosquitto_rr`): ~0.5–1 s;
   `create` ~0.5 s on the device. After `restart` the device was back and answering in ~30 s.
 - Commands run on their own task (queue of 4): the MQTT task must never block, because a
@@ -122,7 +144,7 @@ the running one), size, whole-image SHA-256 against the chunk header, then `esp_
 
 Open work is tracked as issues on the [Blade of Grass project](https://github.com/orgs/rmx-lt/projects/1):
 reconnect under real signal loss ([#16](https://github.com/rmx-lt/rmx-mower-gateway/issues/16)),
-certificate date checks after SNTP ([#18](https://github.com/rmx-lt/rmx-mower-gateway/issues/18)), CMUX / power saving / modem MQTT AT path ([#19](https://github.com/rmx-lt/rmx-mower-gateway/issues/19)),
+CMUX / power saving / modem MQTT AT path ([#19](https://github.com/rmx-lt/rmx-mower-gateway/issues/19)),
 OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15)).
 
 ## Firmware structure (implemented)

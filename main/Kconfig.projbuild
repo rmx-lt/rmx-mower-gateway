@@ -25,4 +25,13 @@ menu "rmx gateway"
         default 5
         range 0 31
 
+    config GATEWAY_TEST_CLOCK_SHIFT_DAYS
+        int "TEST ONLY: shift the clock by this many days after SNTP"
+        default 0
+        range -36500 36500
+        help
+            Keep 0. Non-zero stops SNTP after the first sync and moves the clock,
+            to check that TLS refuses the broker certificate (expired or not yet
+            valid). Such a build never reaches MQTT and rolls back after an OTA.
+
 endmenu

@@ -8,6 +8,7 @@
  * MQTT chunks (main/ota.c).
  */
 #include <stdio.h>
+#include <sys/time.h>
 #include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -31,7 +32,20 @@
 #include "remote_cmd.h"
 #include "sdkconfig.h"
 
+#if !CONFIG_MBEDTLS_HAVE_TIME_DATE
+/* An older sdkconfig.gateway keeps it off over sdkconfig.defaults: delete that line. */
+#error "CONFIG_MBEDTLS_HAVE_TIME_DATE must be y: TLS would ignore certificate dates"
+#endif
+
 static const char *TAG = "gateway";
+
+static void restart_in_30s(const char *why)
+{
+    ESP_LOGE(TAG, "%s, restarting in 30 s", why);
+    vTaskDelay(pdMS_TO_TICKS(30000));
+    cell_stop();
+    esp_restart();
+}
 
 static bool connect_mqtt(void)
 {
@@ -72,20 +86,28 @@ void app_main(void)
 
     board_init();
     if (cell_start(60000) != ESP_OK && !cell_wait_ip(180000)) {
-        ESP_LOGE(TAG, "no data connection, restarting in 30 s");
-        vTaskDelay(pdMS_TO_TICKS(30000));
-        cell_stop();
-        esp_restart();
+        restart_in_30s("no data connection");
     }
 
-    /* Clock for command expiry (expires_at) and TLS logs; not fatal if it fails. */
+    /* TLS checks certificate dates (CONFIG_MBEDTLS_HAVE_TIME_DATE), so no MQTT before
+     * SNTP has set the clock; it also drives command expiry (expires_at). */
     esp_sntp_config_t sntp = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
     esp_netif_sntp_init(&sntp);
-    if (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(15000)) == ESP_OK) {
-        ESP_LOGI(TAG, "clock set by SNTP: %lld", (long long)time(NULL));
-    } else {
-        ESP_LOGW(TAG, "SNTP: no time yet (commands with expires_at are refused until it syncs)");
+    for (int tries = 1; esp_netif_sntp_sync_wait(pdMS_TO_TICKS(15000)) != ESP_OK; tries++) {
+        if (tries == 8) {
+            restart_in_30s("SNTP: no time after 2 min");
+        }
+        ESP_LOGW(TAG, "SNTP: no time yet, not starting TLS");
     }
+    ESP_LOGI(TAG, "clock set by SNTP: %lld", (long long)time(NULL));
+#if CONFIG_GATEWAY_TEST_CLOCK_SHIFT_DAYS != 0
+    /* Test only (wiki Mower-Gateway-Plan, certificate dates): a wrong clock must make TLS refuse the broker. */
+    esp_netif_sntp_deinit();
+    struct timeval tv = { .tv_sec = time(NULL) + CONFIG_GATEWAY_TEST_CLOCK_SHIFT_DAYS * 86400LL };
+    settimeofday(&tv, NULL);
+    ESP_LOGW(TAG, "TEST: clock shifted by %d days to %lld", CONFIG_GATEWAY_TEST_CLOCK_SHIFT_DAYS,
+             (long long)tv.tv_sec);
+#endif
 
     ESP_ERROR_CHECK(remote_cmd_init());
     ota_resume_pending();

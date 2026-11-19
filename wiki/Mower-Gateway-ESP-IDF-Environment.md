@@ -80,6 +80,8 @@ Notes:
   Internal RAM is what matters for TLS buffers; `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`
   / `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC` can move mbedTLS buffers to PSRAM if internal RAM runs low.
 - `CONFIG_MBEDTLS_HAVE_TIME_DATE` is off by default → mbedTLS does not check certificate
-  validity dates. Good enough for the gateway firmware as it is; production should sync time (SNTP over PPP,
-  or the modem clock `AT+CCLK?`) and enable it.
+  validity dates. The gateway turns it on in `sdkconfig.defaults` (issue 18, 2026-11-19); `main/app_main.c`
+  stops the build with `#error` if it is off. An older `sdkconfig.gateway` (or `sdkconfig`) that says
+  `# CONFIG_MBEDTLS_HAVE_TIME_DATE is not set` overrides the defaults: delete that line. The check needs a set
+  clock, so MQTT starts only after SNTP (see [Mower-Gateway-Plan](Mower-Gateway-Plan), "Certificate dates").
 - UART0 (GPIO1/3) is the console. The modem uses UART1 (any free UART works; esp_modem default is UART_NUM_1).
