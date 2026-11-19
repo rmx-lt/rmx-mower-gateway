@@ -127,21 +127,7 @@ OTA failure paths ([#15](https://github.com/rmx-lt/rmx-mower-gateway/issues/15))
 
 ## Firmware structure (implemented)
 
-```
-main/
-  board.c/.h        pins, modem power on/off, STATUS
-  cell.c/.h         esp_modem DTE/DCE, registration wait, PPP up/down, reconnect loop, events
-  mqtt_link.c/.h    esp-mqtt client: mqtts://mqtt.rmx.lt:8884 (client certificate), LWT, subscribe, fw/req
-  gnss.c/.h         SIM7600 GNSS over AT (via cell_with_command_mode): on at boot, read on demand
-  remote_cmd.c/.h   commands from mower/<user>/cmd, acks on …/cmd/ack
-  ota.c/.h          MQTT chunk download, image checks, first-boot confirm / rollback
-  app_main.c        sequence: board → cell → mqtt → loop
-idf_component.yml   espressif/esp_modem ^2.1, espressif/mqtt ^1.1, espressif/cjson ^1.7.19
-Kconfig.projbuild   APN, broker URL (no device name, no passwords)
-creds.c/.h          device name = certificate CN
-devcert.c/.h        P-256 key + CSR + certificate chain in NVS (creds: key, chain), serial provisioning commands
-partitions.csv      16 MB layout with OTA slots
-```
+Modules, tasks, dependencies and the planned refactor: [Mower-Gateway-Architecture](Mower-Gateway-Architecture).
 
 Start from [`tools/ppp_smoke/main/ppp_smoke.c`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/tools/ppp_smoke/main/ppp_smoke.c).
 
