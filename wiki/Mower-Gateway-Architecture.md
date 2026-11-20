@@ -258,7 +258,7 @@ void      cmd_ack(const char *id, const char *cmd, const char *state, const char
                   const char *message, cJSON *result);       /* unchanged, for async finals */
 ```
 
-`components/rmx_codec/include/cmd_core.h` holds the pure part: `cmd_id_valid()`, the id memory (`cmd_mem_find/store`, time passed in) and envelope checks.
+`components/rmx_codec/include/cmd_core.h` holds the pure part: `cmd_id_valid()`, `cmd_name_valid()`, the id memory (`cmd_mem_find/store`, time passed in), the `expires_at` check (`cmd_check_expires`) and the error codes (`CMD_E_*`). Implemented and host-tested in [#94](https://github.com/rmx-lt/rmx-mower-gateway/issues/94); `remote_cmd.c` moves onto it with the registry in #77.
 
 ### 5.4 State and metrics
 
