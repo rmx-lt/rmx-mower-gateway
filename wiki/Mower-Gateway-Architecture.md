@@ -214,6 +214,30 @@ The decisions of steps 1 and 3 are pure and host-tested in `components/rmx_codec
 
 The task watchdog alone does not fit: `cell` legitimately blocks for minutes inside esp_modem calls. Liveness counters checked by the supervisor do, and short-loop tasks (`bl_rx`, `bl_tx`, supervisor) also join the task watchdog.
 
+**Implemented in [#79](https://github.com/rmx-lt/rmx-mower-gateway/issues/79)** (verified on the board 2026-11-20):
+- `main/gw_tasks.h/.c`: the table of today's tasks (`remote_cmd` 4/6144, `gw_tick` 3/6144, `gw_signal` 2/4096, `cell_wd` 5/4096, `supervisor` 3/6144, `ota` 3/12288, `devcert` 3/6144). Every module creates its task with `gw_task_create()`. The board link and ntrip tasks join with #62 and #63.
+- Liveness: `remote_cmd` (queue wait capped at 10 s), `gw_tick` and `gw_signal` call `gw_task_alive()` once per loop. The supervisor restarts the board when one has not counted for `CONFIG_GATEWAY_LIVE_STALE_S` (120 s), never during an update. `cell_wd` is not watched: it blocks for minutes inside esp_modem while redialling, and step 3 covers it. `devcert` waits on the console.
+- Ladder: the thresholds are `CONFIG_GATEWAY_REC_MQTT_DOWN_S` (300) and `CONFIG_GATEWAY_REC_LINK_DOWN_S` (1800). Step 1 calls `cell_reconnect()` (command mode, then the redial task dials again).
+- Not done: the task watchdog join. Here the task watchdog only logs (`CONFIG_ESP_TASK_WDT_PANIC` off, 5 s), and the supervisor can block on a publish for longer than that. Core dump: [#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110).
+- Board checks: a test build whose `ping` blocks `remote_cmd` for 200 s logged `restarting in 0 ms: task remote_cmd did not loop for 120 s` and booted clean. A test build with the clock shifted 400 days (TLS refused, PPP up) and thresholds 60/300 s logged `MQTT down with PPP up for 60 s: reconnecting the cell` every ~62 s (each redial got PPP back in about 150 ms), then `server link down too long` at 306 s.
+
+Free stack, smallest seen (bytes, high-water mark from the 60 s alive log `tasks: stack free`), over a normal run, an OTA, a restart and the redial test:
+
+| Task | Stack | Smallest free |
+|---|---|---|
+| `remote_cmd` | 6144 | 4012 |
+| `gw_tick` | 6144 | 4260 |
+| `gw_signal` | 4096 | 2848 |
+| `cell_wd` | 4096 | 2464 (after redials) |
+| `supervisor` | 6144 | 3544 |
+| `ota` | 12288 | 9596 (during the download; the signature check at the end is not in this sample) |
+| `devcert` | 6144 | 5272 (idle; provisioning not measured) |
+| `mqtt_task` (esp-mqtt) | sdkconfig | 4528 |
+| `tcpip` (lwIP) | sdkconfig | 2836 |
+| `sys_evt` | sdkconfig | 1532 |
+
+No resize for now: about 244 KB of internal RAM is free, and the paths not measured (OTA signature check, provisioning) could need more.
+
 ## 5. Interfaces (Proposal, header sketches)
 
 Names follow §7. Sketches, not final signatures.

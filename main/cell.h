@@ -25,6 +25,10 @@ void cell_refresh_signal(void);
 /* Leaves PPP (modem back in command mode) so the next boot starts clean. */
 void cell_stop(void);
 
+/* Hangs up and lets the redial task dial again (supervisor recovery ladder:
+ * PPP looks up but MQTT does not come back). Blocks up to 15 s for the modem. */
+void cell_reconnect(void);
+
 /* Runs fn(ctx) with the modem briefly out of PPP: pauses the netif, "+++",
  * fn, "ATO". The PPP session and TCP connections survive (~2-3 s gap).
  * Inside fn, talk to the modem with cell_at(). Returns fn's result, or

@@ -22,6 +22,7 @@
 #include "remote_cmd.h"
 #include "supervisor.h"
 #include "esp_random.h"
+#include "gw_tasks.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "ota";
@@ -534,7 +535,7 @@ bool ota_start(const char *cmd_id, const char *file, const char *version, int si
     /* The "accepted" ack goes out before the task starts, so a failure of the
      * task cannot overtake it. */
     cmd_ack(cmd_id, "ota", "accepted", NULL, NULL, NULL);
-    if (xTaskCreate(ota_task, "ota", 12288, NULL, 3, NULL) != pdPASS) {
+    if (gw_task_create(GW_T_OTA, ota_task, NULL, NULL) != pdPASS) {
         s_busy = false;
         *error = "failed";
         *message = "no memory for the update task";

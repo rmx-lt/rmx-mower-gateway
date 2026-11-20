@@ -15,6 +15,7 @@
 #include "gwstate.h"
 #include "monitor.h"
 #include "mqtt_link.h"
+#include "gw_tasks.h"
 #include "ota.h"
 #include "usage.h"
 
@@ -434,6 +435,7 @@ static void tick_task(void *arg)
     TickType_t last = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(TICK_MS));
+        gw_task_alive(GW_T_TICK);
         int64_t now = esp_timer_get_time();
         bool up = gw_link_get() & GW_SERVER_LINK_UP;
         if (up && !was_up) {
@@ -455,6 +457,7 @@ static void signal_task(void *arg)
 {
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(60000));
+        gw_task_alive(GW_T_SIGNAL);
         if (cell_is_up() && !ota_busy()) {
             cell_refresh_signal();
         }
@@ -468,8 +471,8 @@ void metrics_start(void)
     }
     add(&s_fam_up, NULL, NULL, 1);
     add(&s_fam_down, NULL, NULL, 2);
-    if (monitor_init() != ESP_OK || xTaskCreate(tick_task, "gw_tick", 6144, NULL, 3, NULL) != pdPASS ||
-            xTaskCreate(signal_task, "gw_signal", 4096, NULL, 2, NULL) != pdPASS) {
+    if (monitor_init() != ESP_OK || gw_task_create(GW_T_TICK, tick_task, NULL, NULL) != pdPASS ||
+            gw_task_create(GW_T_SIGNAL, signal_task, NULL, NULL) != pdPASS) {
         ESP_LOGE(TAG, "could not start the publisher tasks");
     }
 }

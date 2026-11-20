@@ -25,6 +25,26 @@ menu "rmx gateway"
         default 5
         range 0 31
 
+    config GATEWAY_REC_MQTT_DOWN_S
+        int "Seconds MQTT may stay down with PPP up before the cell redials"
+        default 300
+        range 60 86400
+        help
+            Recovery ladder step 1 (wiki Mower-Gateway-Architecture §4.3). Repeats
+            every this many seconds while the condition lasts. Tuned with #16.
+
+    config GATEWAY_REC_LINK_DOWN_S
+        int "Seconds the server link may stay down before the gateway restarts"
+        default 1800
+        range 300 86400
+        help
+            Recovery ladder step 3. Never during a firmware update.
+
+    config GATEWAY_LIVE_STALE_S
+        int "Seconds a watched task may go without a loop before the gateway restarts"
+        default 120
+        range 30 3600
+
     config GATEWAY_TEST_CLOCK_SHIFT_DAYS
         int "TEST ONLY: shift the clock by this many days after SNTP"
         default 0

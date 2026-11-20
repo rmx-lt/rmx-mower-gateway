@@ -15,6 +15,7 @@
 #include "gw_link.h"
 #include "gwstate.h"
 #include "metrics.h"
+#include "gw_tasks.h"
 #include "usage.h"
 #include "sdkconfig.h"
 
@@ -67,6 +68,15 @@ static void on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
         gw_link_set(GW_CELL_UP, false);
         board_led(false);
     }
+}
+
+/* PPP is gone or given up: the redial task dials again from command mode. */
+static void mark_lost(void)
+{
+    xEventGroupClearBits(s_ev, GOT_IP);
+    xEventGroupSetBits(s_ev, LOST_IP);
+    gw_link_set(GW_CELL_UP, false);
+    board_led(false);
 }
 
 /* Gets the modem answering AT in command mode; powers it on if it is off. */
@@ -222,7 +232,7 @@ esp_err_t cell_start(int timeout_ms)
         ESP_LOGI(TAG, "module %s, STATUS=%d", name, board_modem_status());
         err = dial(timeout_ms);
     }
-    xTaskCreate(watchdog_task, "cell_wd", 4096, NULL, 5, NULL);
+    gw_task_create(GW_T_CELL, watchdog_task, NULL, NULL);
     if (err != ESP_OK) {
         xEventGroupSetBits(s_ev, LOST_IP);   /* let the watchdog keep trying */
     }
@@ -263,6 +273,17 @@ void cell_stop(void)
     }
 }
 
+void cell_reconnect(void)
+{
+    if (!s_dce || xSemaphoreTake(s_lock, pdMS_TO_TICKS(15000)) != pdTRUE) {
+        return;
+    }
+    ESP_LOGW(TAG, "hanging up to redial");
+    esp_modem_set_mode(s_dce, ESP_MODEM_MODE_COMMAND);
+    mark_lost();
+    xSemaphoreGive(s_lock);
+}
+
 esp_err_t cell_with_command_mode(cell_cmd_fn fn, void *ctx, int wait_ms)
 {
     if (!cell_is_up()) {
@@ -299,10 +320,7 @@ esp_err_t cell_with_command_mode(cell_cmd_fn fn, void *ctx, int wait_ms)
         /* PPP is gone: let the watchdog redial from command mode. */
         ESP_LOGE(TAG, "ATO failed, PPP lost; redialing");
         esp_modem_set_mode(s_dce, ESP_MODEM_MODE_COMMAND);
-        xEventGroupClearBits(s_ev, GOT_IP);
-        xEventGroupSetBits(s_ev, LOST_IP);
-        gw_link_set(GW_CELL_UP, false);
-        board_led(false);
+        mark_lost();
     }
     ESP_LOGI(TAG, "AT session: +++ %lld ms, commands %lld ms, ATO %lld ms (%s)",
              (t1 - t0) / 1000, (t2 - t1) / 1000, (esp_timer_get_time() - t2) / 1000,

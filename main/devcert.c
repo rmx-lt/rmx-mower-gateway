@@ -17,6 +17,7 @@
 #include "psa/crypto.h"
 
 #include "creds.h"
+#include "gw_tasks.h"
 
 static const char *TAG = "devcert";
 
@@ -305,5 +306,5 @@ void devcert_console_start(void)
         ESP_LOGE(TAG, "UART0 driver install failed: no serial provisioning");
         return;
     }
-    xTaskCreate(console_task, "devcert", 6144, NULL, 3, NULL);
+    gw_task_create(GW_T_DEVCERT, console_task, NULL, NULL);
 }

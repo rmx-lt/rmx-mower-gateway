@@ -11,6 +11,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "creds.h"
+#include "gw_tasks.h"
 #include "gwstate.h"
 #include "mqtt_link.h"
 #include "ota.h"
@@ -226,7 +227,8 @@ static void cmd_task(void *arg)
 {
     cmd_msg_t m;
     for (;;) {
-        if (xQueueReceive(s_queue, &m, portMAX_DELAY) == pdTRUE) {
+        gw_task_alive(GW_T_REMOTE_CMD);
+        if (xQueueReceive(s_queue, &m, pdMS_TO_TICKS(10000)) == pdTRUE) {
             handle(m.buf, m.len);
             free(m.buf);
         }
@@ -255,7 +257,7 @@ esp_err_t remote_cmd_init(void)
 {
     s_lock = xSemaphoreCreateMutex();
     s_queue = xQueueCreate(4, sizeof(cmd_msg_t));
-    if (!s_lock || !s_queue || xTaskCreate(cmd_task, "remote_cmd", 6144, NULL, 4, NULL) != pdPASS) {
+    if (!s_lock || !s_queue || gw_task_create(GW_T_REMOTE_CMD, cmd_task, NULL, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     cmd_register("ping", cmd_ping, 0);
