@@ -1,7 +1,7 @@
 /* The one owner of NVS (wiki Mower-Gateway-Architecture §5.6). Namespaces and
  * keys in use: "gw" (boot counter, OTA state, previous version, legacy flag;
- * gwstate's gw_nvs_*) and "creds" (device key, certificate chain, fallback
- * passwords; devcert, creds).
+ * gwstate's gw_nvs_*) and "creds" (device key and certificate chain;
+ * devcert).
  *
  * The module never logs a value, only namespace and key, so secrets (the
  * device key, the NTRIP password of #63) are safe to pass through it.
