@@ -106,7 +106,7 @@ Ranked by what they cost the next features. **Code** facts, **Proposal** fixes.
 7. **NVS has four openers.** #37 needs a pending→active swap, #49 changes init, #63 adds a secret. → one settings module (§5.6).
 8. **`metrics.c` mixes four jobs** (catalogue, telemetry, monitor, supervisor tick). → split when the tick moves out.
 
-Kept as they are: queues from the MQTT task to workers, `cell_with_command_mode` as the only way to the modem's AT channel, static topic strings, Kconfig for build-time values, heap JSON (messages are rare and PSRAM is plentiful).
+Kept as they are: queues from the MQTT task to workers, `cell_with_command_mode` as the only way to the modem's AT channel (pause-PPP; CMUX was benched in [#19](https://github.com/rmx-lt/rmx-mower-gateway/issues/19) and stays out until [#98](https://github.com/rmx-lt/rmx-mower-gateway/issues/98) decides it, see [Mower-Gateway-PPP](Mower-Gateway-PPP)), static topic strings, Kconfig for build-time values, heap JSON (messages are rare and PSRAM is plentiful).
 
 ## 3. Target layers (Proposal)
 

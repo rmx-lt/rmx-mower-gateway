@@ -7,9 +7,9 @@ Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4
 | # | Page | Read it when you need… |
 |---|---|---|
 | 01 | [Mower-Gateway-Board-Hardware](Mower-Gateway-Board-Hardware) | pins, DIP switch, power, antennas, flash/PSRAM size, flashing tips |
-| 02 | [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600) | modem firmware, power sequence, registration, AT commands, modem-internal TLS/MQTT (verified) |
+| 02 | [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600) | modem firmware, power sequence, registration, AT commands, modem-internal TLS/MQTT (verified; no fallback), modem sleep and power saving |
 | 03 | [Mower-Gateway-ESP-IDF-Environment](Mower-Gateway-ESP-IDF-Environment) | toolchain paths, build/flash commands, IDF v6 changes, sdkconfig for this board |
-| 04 | [Mower-Gateway-PPP](Mower-Gateway-PPP) | esp_modem + PPP: correct DTE config, startup sequence, CMUX, robustness |
+| 04 | [Mower-Gateway-PPP](Mower-Gateway-PPP) | esp_modem + PPP: correct DTE config, startup sequence, pause-PPP vs CMUX (bench), robustness |
 | 05 | [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract) | endpoints, cert chain, Mosquitto ACL, firmware chunks |
 | 06 | [Mower-Gateway-Plan](Mower-Gateway-Plan) | what is proven (incl. the gateway firmware), decisions, risks |
 | 07 | [Mower-Gateway-Architecture](Mower-Gateway-Architecture) | firmware modules, tasks, dependencies; target architecture and refactor steps before the board link and NTRIP |
@@ -35,6 +35,7 @@ Logins     certificate only: board-made P-256 key + chain in NVS (tools/provisio
 Commands   PC → mower/<name>/gateway/cmd → device → …/gateway/cmd/ack (tools/mqtt_cmd.ps1, login app; tools/mqtt_watch.ps1 reads the rest) — verified 2026-11-15; a repeated id gets the same ack
 OTA        `ota` command → MQTT file <version>.bin, signed (RSA-3072, no Secure Boot), whole-image SHA-256, rollback. Verified 2026-11-10: 0.3.0 USB flash, unknown file `not_found`, reset at 10% then clean retry, 0.3.1 confirmed on ota_1 (97 s, 729088 bytes).
 GNSS       the modem's GNSS is no longer used by the firmware (Mower-Protocol §1); AT in PPP via esp_modem_pause_net (~2 s) still runs once a minute for the signal reading
+Options    issue 19 (2026-11-20): keep pause-PPP (CMUX works but re-entry failed, issue 98); no modem-MQTT fallback; modem awake while working, parked-mode policy after a current measurement (issue 99)
 ```
 
 ## Local reference material

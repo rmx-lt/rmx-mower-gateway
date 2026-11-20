@@ -9,6 +9,13 @@
 - `openssl s_client` from the PC against `api.rmx.lt:443` (the HTTPS host then; now
   `app.rmx.lt:443`) and `mqtt.rmx.lt:8883`: chain, TLS 1.2 cipher.
 
+## Measured on the hardware (2026-11-19/20, issue 19)
+
+- `tools/ppp_smoke` changed for a CMUX bench (not committed): 3 runs, see Mower-Gateway-PPP "CMUX".
+- `tools/at_bridge` + `tools/at_session.py`: modem MQTT connect, CSCLK/DTR sleep, PSM/eDRX state (Mower-Gateway-SIM7600).
+- Docs: SIMCom Sleep Mode and MQTT(S) application notes, AT Command Manual V3.00 (CMQTT error codes, payload limit);
+  ESP-IDF Sleep Modes and ESP FAQ (UART wakeup from light sleep).
+
 ## Local repositories
 
 - LilyGo-Modem-Series (`C:\Repos\LilyGo-Modem-Series`, HEAD 51b988a):
