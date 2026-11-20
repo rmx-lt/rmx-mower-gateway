@@ -147,7 +147,7 @@ The byte layout is wiki [Server-App](Server-App#firmware-over-mqtt). The device 
   instead (the legacy `url` is gone). The device does not open HTTPS.
 - **Report.** The final ack comes from the new image (Mower-Protocol §6.5): the command id is kept in NVS across the
   restart; once the new image has confirmed itself and the server link is up it sends `done` with
-  `{"version","previous","partition"}` (`previous` also shows in `gateway/state`). If the new image does not confirm,
+  `{"version","previous","partition"}` (`previous` also shows in `gateway/state`: the image stores it when it confirms, and the first state on the server-link edge waits for that, so no state after an update has `"previous": null`; issue 108, verified 2026-11-20: OTA 0.4.0-pr108a → pr108b gave one state with `previous` 0.4.0-pr108a, then the `done` ack). If the new image does not confirm,
   the old one boots again and sends `failed` with `rolled_back`. The retained `mower/<name>/firmware` topic is gone.
 - **Retries.** One chunk request is open at a time. After 10 s without an answer the same chunk is requested again
   with a new request id, up to 5 times in a row; then the update ends with `download_failed` (so does an error

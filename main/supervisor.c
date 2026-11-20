@@ -69,6 +69,9 @@ static void supervisor_task(void *arg)
             ota_confirm();   /* a new image that reaches the broker is good; cheap once confirmed */
         }
         bool up = gw_link_get() & GW_SERVER_LINK_UP;
+        if (up && !was_up && !mqtt_link_wait_ready(0)) {
+            up = false;   /* the first state waits for ota_confirm() above, which stores "previous" (#108) */
+        }
         if (up && !was_up) {
             ESP_LOGI(TAG, "server link up: publishing state");
             gw_state_publish(true);   /* §4.2; metrics publishes the catalogue on the same edge */
