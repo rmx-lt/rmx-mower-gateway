@@ -30,6 +30,7 @@
 #include "gwstate.h"
 #include "metrics.h"
 #include "mqtt_link.h"
+#include "ntrip.h"
 #include "ota.h"
 #include "remote_cmd.h"
 #include "supervisor.h"
@@ -114,6 +115,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(remote_cmd_init());
     ota_resume_pending();
+    ntrip_start();     /* registers its commands and metrics: before the catalogue and MQTT */
     metrics_start();   /* catalogue, telemetry and monitor streams once the server link is up */
     ESP_ERROR_CHECK(supervisor_start());   /* state, image confirm, OTA result, alive log */
     bool online = connect_mqtt();

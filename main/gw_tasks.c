@@ -18,6 +18,7 @@ static const gw_task_def_t s_tasks[GW_T_COUNT] = {
     [GW_T_REMOTE_CMD] = { "remote_cmd", 4, 6144 },
     [GW_T_TICK]       = { "gw_tick",    3, 6144 },
     [GW_T_SIGNAL]     = { "gw_signal",  2, 4096 },
+    [GW_T_NTRIP]      = { "ntrip",      6, 4096 },
     [GW_T_CELL]       = { "cell_wd",    5, 4096 },
     [GW_T_SUPERVISOR] = { "supervisor", 3, 6144 },
     [GW_T_OTA]        = { "ota",        3, 12288 },

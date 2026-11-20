@@ -54,4 +54,12 @@ menu "rmx gateway"
             to check that TLS refuses the broker certificate (expired or not yet
             valid). Such a build never reaches MQTT and rolls back after an OTA.
 
+    config GATEWAY_TEST_NTRIP_GGA
+        bool "TEST ONLY: feed the NTRIP client a fixed GGA position"
+        default n
+        help
+            Keep off. For a bench test without the autopilot: the NTRIP client
+            gets a fixed position (a public place in Vilnius) at boot, so it
+            connects to the caster as soon as it has settings.
+
 endmenu

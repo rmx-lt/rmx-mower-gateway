@@ -21,6 +21,7 @@ typedef enum {
     GW_T_REMOTE_CMD,
     GW_T_TICK,
     GW_T_SIGNAL,
+    GW_T_NTRIP,
     GW_T_WATCHED,
     /* not watched */
     GW_T_CELL = GW_T_WATCHED,
