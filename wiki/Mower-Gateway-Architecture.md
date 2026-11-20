@@ -238,19 +238,26 @@ bool        gw_link_wait(EventBits_t all, int timeout_ms);
 
 ### 5.2 `mqtt_link.h` (routes)
 
+Implemented in [#76](https://github.com/rmx-lt/rmx-mower-gateway/issues/76) (host build only; board check pending).
+
 ```c
 typedef enum { MQTT_SCOPE_GATEWAY, MQTT_SCOPE_AUTOPILOT, MQTT_SCOPE_ABSOLUTE } mqtt_scope_t;
 typedef void (*mqtt_route_cb_t)(const char *subtopic, const uint8_t *data, size_t len, void *ctx);
-#define MQTT_ROUTE_READY 0x1                      /* counts for mqtt_link_ready() */
-esp_err_t mqtt_link_start(void);
+#define MQTT_ROUTE_READY 0x1                      /* counts for mqtt_link_wait_ready() */
 esp_err_t mqtt_link_route(mqtt_scope_t, const char *subtopic, int qos, unsigned flags,
                           mqtt_route_cb_t cb, void *ctx);   /* subscribed now and on every connect */
 esp_err_t mqtt_link_unroute(mqtt_scope_t, const char *subtopic);
-esp_err_t mqtt_link_publish(mqtt_scope_t, const char *subtopic, const void *data, size_t len,
-                            int qos, bool retain);
-bool      mqtt_link_ready(int timeout_ms);
-void      mqtt_link_stop(void);
+esp_err_t mqtt_link_start(void);
+bool      mqtt_link_wait_ready(int timeout_ms);  /* connected and every READY route has its SUBACK */
+esp_err_t mqtt_link_publish(mqtt_scope_t, const char *subtopic, const char *payload, int len,
+                            int qos, bool retain);   /* len 0 = strlen */
 ```
+
+- Scopes: `mower/<name>/gateway/<sub>`, `mower/<name>/autopilot/<sub>`, or `<sub>` as the whole topic. No wildcards.
+- 24 routes; routes may be added before `mqtt_link_start()` (topics are built at start) or while connected (subscribed at once). The same scope and subtopic again replaces the handler.
+- Callbacks run on the MQTT task, outside the table lock, and must not block.
+- Current routes: `mower/status/server` (mqtt_link itself, sets `GW_SERVER_ONLINE`), `gateway/cmd` (remote_cmd), `gateway/fw/chunk` and `gateway/fw/res` (ota, both `MQTT_ROUTE_READY`, registered in `ota_boot_init()`).
+- `mqtt_link_stop()` is not implemented: nothing needs it yet.
 
 ### 5.3 `remote_cmd.h` (registry)
 

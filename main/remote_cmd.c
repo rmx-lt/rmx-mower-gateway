@@ -43,7 +43,7 @@ static mem_t s_mem[MEM_IDS];
 static SemaphoreHandle_t s_lock;
 
 /* Runs on the MQTT task: copy and hand over, never block. */
-static void on_cmd(const char *data, size_t len)
+static void on_cmd(const char *subtopic, const uint8_t *data, size_t len, void *ctx)
 {
     if (len > MAX_CMD) {
         ESP_LOGW(TAG, "command too large (%u bytes), dropped", (unsigned)len);
@@ -321,6 +321,5 @@ esp_err_t remote_cmd_init(void)
     if (!s_lock || !s_queue || xTaskCreate(cmd_task, "remote_cmd", 6144, NULL, 4, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
-    mqtt_link_set_cmd_handler(on_cmd);
-    return ESP_OK;
+    return mqtt_link_route(MQTT_SCOPE_GATEWAY, "cmd", 1, 0, on_cmd, NULL);
 }

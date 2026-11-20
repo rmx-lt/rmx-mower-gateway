@@ -132,7 +132,7 @@ void gw_state_publish(bool force)
     if (force || !s_last_state || strcmp(body, s_last_state) != 0) {
         gw_add_time(st, false);
         char *full = cJSON_PrintUnformatted(st);
-        if (full && mqtt_link_publish("state", full, 0, 1, true) == ESP_OK) {
+        if (full && mqtt_link_publish(MQTT_SCOPE_GATEWAY, "state", full, 0, 1, true) == ESP_OK) {
             free(s_last_state);
             s_last_state = body;
             body = NULL;
