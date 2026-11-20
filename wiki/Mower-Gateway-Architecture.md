@@ -262,17 +262,23 @@ esp_err_t mqtt_link_publish(mqtt_scope_t, const char *subtopic, const char *payl
 ### 5.3 `remote_cmd.h` (registry)
 
 ```c
-typedef struct { const char *error; const char *message; cJSON *result; bool accepted; } cmd_reply_t;
+typedef struct { const char *error; const char *message; cJSON *result; bool accepted; bool restart; } cmd_reply_t;
 typedef void (*cmd_fn_t)(const char *id, const cJSON *cmd, cmd_reply_t *reply);
 #define CMD_DURING_OTA   0x1
-#define CMD_SECRET_ARGS  0x2   /* log id and name only */
+#define CMD_SECRET_ARGS  0x2   /* never log the arguments, not even at debug level */
 esp_err_t remote_cmd_init(void);
 esp_err_t cmd_register(const char *name, cmd_fn_t fn, unsigned flags);
 void      cmd_ack(const char *id, const char *cmd, const char *state, const char *error,
                   const char *message, cJSON *result);       /* unchanged, for async finals */
 ```
 
-`components/rmx_codec/include/cmd_core.h` holds the pure part: `cmd_id_valid()`, `cmd_name_valid()`, the id memory (`cmd_mem_find/store`, time passed in), the `expires_at` check (`cmd_check_expires`) and the error codes (`CMD_E_*`). Implemented and host-tested in [#94](https://github.com/rmx-lt/rmx-mower-gateway/issues/94); `remote_cmd.c` moves onto it with the registry in #77.
+`components/rmx_codec/include/cmd_core.h` holds the pure part: `cmd_id_valid()`, `cmd_name_valid()`, the id memory (`cmd_mem_find/store`, time passed in), the `expires_at` check (`cmd_check_expires`) and the error codes (`CMD_E_*`). Implemented and host-tested in [#94](https://github.com/rmx-lt/rmx-mower-gateway/issues/94).
+
+Registry implemented in [#77](https://github.com/rmx-lt/rmx-mower-gateway/issues/77) (verified on the board 2026-11-20):
+- A table of 16. `remote_cmd` registers `ping`, `restart`, `autopilot_reset` (answers failed until #62 wires the line); `ota_boot_init()` registers `ota`; `monitor_init()` registers `monitor_start`/`monitor_stop` with `CMD_DURING_OTA`.
+- At info level every command logs only `<- <cmd> id <id>`; the payload is logged at debug level only for a registered command without `CMD_SECRET_ARGS`.
+- Order in the dispatcher: id/name check, repeated id (repeat the last ack), `expires_at`, unknown (`unknown_cmd`, message lists the registered names), busy during OTA, then the handler. A handler that leaves `error` NULL and `accepted` false gets a `done` ack with its `result`.
+- `reply.restart` restarts through `gw_restart(reason, delay_ms)` (supervisor), the one deliberate restart path: logs the reason, waits, stops MQTT and PPP, restarts. OTA and the boot-failure restart use it too.
 
 ### 5.4 State and metrics
 

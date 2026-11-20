@@ -20,6 +20,7 @@
 #include "gwstate.h"
 #include "mqtt_link.h"
 #include "remote_cmd.h"
+#include "supervisor.h"
 #include "esp_random.h"
 #include "sdkconfig.h"
 
@@ -134,11 +135,9 @@ static void finish_task(void)
 
 static void restart_into_new_image(void)
 {
-    ESP_LOGW(TAG, "restarting into %s in 3 s", s_req.version);
-    vTaskDelay(pdMS_TO_TICKS(3000));
-    mqtt_link_stop();
-    cell_stop();
-    esp_restart();
+    char why[48];
+    snprintf(why, sizeof(why), "into %s", s_req.version);
+    gw_restart(why, 3000);
 }
 
 static bool sha256_id(const char *rid, uint8_t out[8])
@@ -557,8 +556,37 @@ static void confirm_timeout(void *arg)
     esp_ota_mark_app_invalid_rollback_and_reboot();
 }
 
+/* The ota command (§6.4): arguments checked here, the update runs on its own task. */
+static void cmd_ota(const char *id, const cJSON *cmd, cmd_reply_t *r)
+{
+    const cJSON *size_item = cJSON_GetObjectItem(cmd, "size");
+    const char *version = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "version"));
+    const char *file = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "file"));
+    char file_buf[129];
+    r->error = CMD_E_BAD_REQUEST;
+    if (!file && cJSON_GetObjectItem(cmd, "file")) {
+        r->message = "file must be a string";
+    } else if (size_item && (!cJSON_IsNumber(size_item) || cJSON_GetNumberValue(size_item) < 0)) {
+        r->message = "size must be the image size in bytes";
+    } else if (!version || !version[0]) {
+        r->message = "ota needs a string version";
+    } else {
+        if (!file || !file[0]) {
+            snprintf(file_buf, sizeof(file_buf), "%s.bin", version);
+            file = file_buf;
+        }
+        /* ota_start sends the "accepted" ack itself, before the task can fail */
+        if (ota_start(id, file, version, size_item ? (int)cJSON_GetNumberValue(size_item) : 0, &r->error,
+                      &r->message)) {
+            r->error = NULL;
+            r->accepted = true;
+        }
+    }
+}
+
 void ota_boot_init(void)
 {
+    cmd_register("ota", cmd_ota, 0);
     /* Subscribed before the first fw/req: mqtt_link_wait_ready() waits for both. */
     mqtt_link_route(MQTT_SCOPE_GATEWAY, "fw/chunk", 1, MQTT_ROUTE_READY, on_fw, (void *)1);
     mqtt_link_route(MQTT_SCOPE_GATEWAY, "fw/res", 1, MQTT_ROUTE_READY, on_fw, NULL);

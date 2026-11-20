@@ -55,6 +55,15 @@ static void supervisor_task(void *arg)
     }
 }
 
+void gw_restart(const char *reason, int delay_ms)
+{
+    ESP_LOGW(TAG, "restarting in %d ms: %s", delay_ms, reason);
+    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    mqtt_link_stop();
+    cell_stop();
+    esp_restart();
+}
+
 esp_err_t supervisor_start(void)
 {
     if (xTaskCreate(supervisor_task, "supervisor", 6144, NULL, 3, &s_task) != pdPASS) {

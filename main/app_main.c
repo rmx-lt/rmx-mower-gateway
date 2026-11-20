@@ -43,10 +43,8 @@ static const char *TAG = "gateway";
 
 static void restart_in_30s(const char *why)
 {
-    ESP_LOGE(TAG, "%s, restarting in 30 s", why);
-    vTaskDelay(pdMS_TO_TICKS(30000));
-    cell_stop();
-    esp_restart();
+    ESP_LOGE(TAG, "%s", why);
+    gw_restart(why, 30000);
 }
 
 static bool connect_mqtt(void)
