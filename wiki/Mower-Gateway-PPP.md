@@ -100,6 +100,20 @@ changes the whole DTE/redial path (mode transitions, a failed re-entry), and tod
 needs AT only once a minute (signal reading), so a 2 s pause is cheap. Revisit when AT is needed
 often or the 2 s gap starts to hurt a stream (NTRIP corrections, board-link relay).
 
+**Correction gap measured** ([#98](https://github.com/rmx-lt/rmx-mower-gateway/issues/98) step 1, 2026-11-20, board on
+LTE, NTRIP streaming about 1.1 KB/s from the server's caster, bench log of every inter-arrival gap over 400 ms, 6.5 min):
+
+| | Gaps |
+|---|---|
+| all 388 arrivals | median 866 ms, p95 950 ms, p99 1985 ms, max 3434 ms (the caster sends about once a second) |
+| right after each of the 6 AT sessions (`+++` 1910 ms, commands 11 ms, `ATO` 11 ms) | 1681, 2291, 2088, 2044, 3434, 1728 ms |
+| without an AT session | 11 gaps of 1584–1985 ms (LTE or caster jitter) |
+
+The AT session delays the corrections by 1–2.5 s once a minute; TCP delivers them late, none are lost, and the
+socket never dropped. That is the same order as the network's own jitter, so the gap is judged not to matter and
+pause-PPP stays (no CMUX, no change to the 60 s reading). To recheck with the autopilot (#62): `gnss.correction_age`
+and the RTK fix across a signal reading.
+
 ## AT commands while online: CMUX (bench, verified 2026-11-19)
 
 `AT+CMUX=?` → `(0),(0),(1-8),(1-1500),…` — basic-mode CMUX only.
