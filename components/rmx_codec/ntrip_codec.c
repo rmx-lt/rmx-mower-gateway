@@ -41,51 +41,116 @@ static void put(sink_t *k, const char *fmt, ...)
     }
 }
 
-static void put_base64(sink_t *k, const uint8_t *p, size_t len)
+/* Base64 of the concatenated strings parts[0..n), without joining them in a
+ * buffer: the password is never copied anywhere but the request. */
+static void put_base64(sink_t *k, const char *const *parts, int n)
 {
     static const char T[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for (size_t i = 0; i < len; i += 3) {
-        uint32_t v = (uint32_t)p[i] << 16;
-        if (i + 1 < len) {
-            v |= (uint32_t)p[i + 1] << 8;
+    int part = 0;
+    const char *p = parts[0];
+    for (;;) {
+        uint8_t b[3];
+        int got = 0;
+        while (got < 3 && part < n) {
+            if (*p) {
+                b[got++] = (uint8_t)*p++;
+            } else if (++part < n) {
+                p = parts[part];
+            }
         }
-        if (i + 2 < len) {
-            v |= p[i + 2];
+        if (got == 0) {
+            return;
         }
-        char q[5] = { T[(v >> 18) & 63], T[(v >> 12) & 63], i + 1 < len ? T[(v >> 6) & 63] : '=',
-                      i + 2 < len ? T[v & 63] : '=', '\0' };
+        uint32_t v = (uint32_t)b[0] << 16 | (got > 1 ? (uint32_t)b[1] << 8 : 0) | (got > 2 ? b[2] : 0);
+        char q[5] = { T[(v >> 18) & 63], T[(v >> 12) & 63], got > 1 ? T[(v >> 6) & 63] : '=',
+                      got > 2 ? T[v & 63] : '=', '\0' };
         put(k, "%s", q);
+        if (got < 3) {
+            return;
+        }
     }
 }
 
-int ntrip_build_request(char *out, size_t cap, const char *host, int port, const char *mountpoint,
-                        const char *user, const char *password, const char *gga)
+/* Length of s without a trailing CR LF. */
+static size_t line_len(const char *s)
 {
-    if (!out || cap == 0 || !host || !host[0] || !mountpoint || !mountpoint[0] || port < 1 || port > 65535 ||
-            !clean(host, false, true) || !clean(mountpoint, false, true) ||
-            (user && !clean(user, true, false)) || (password && !clean(password, true, true))) {
+    size_t n = strlen(s);
+    while (n > 0 && (s[n - 1] == '\r' || s[n - 1] == '\n')) {
+        n--;
+    }
+    return n;
+}
+
+int ntrip_build_request(char *out, size_t cap, const ntrip_cfg_t *cfg, ntrip_ver_t ver, const char *gga)
+{
+    if (!out || cap == 0 || !cfg || !cfg->host || !cfg->host[0] || !cfg->mountpoint || !cfg->mountpoint[0] ||
+            cfg->port < 1 || cfg->port > 65535 || !clean(cfg->host, false, true) ||
+            !clean(cfg->mountpoint, false, true) || (cfg->user && !clean(cfg->user, true, false)) ||
+            (cfg->password && !clean(cfg->password, true, true))) {
         return -1;
     }
-    sink_t k = { out, cap, 0, false };
-    put(&k, "GET /%s HTTP/1.0\r\nHost: %s:%d\r\nUser-Agent: NTRIP rmx-gateway/1.0\r\n", mountpoint, host, port);
-    if (user && user[0]) {
-        char cred[256];
-        int n = snprintf(cred, sizeof(cred), "%s:%s", user, password ? password : "");
-        if (n < 0 || (size_t)n >= sizeof(cred)) {
+    size_t gl = gga ? line_len(gga) : 0;
+    for (size_t i = 0; i < gl; i++) {
+        if ((unsigned char)gga[i] < 0x20) {
             return -1;
         }
+    }
+    sink_t k = { out, cap, 0, false };
+    put(&k, "GET /%s HTTP/1.%c\r\nHost: %s:%d\r\n", cfg->mountpoint, ver == NTRIP_V2 ? '1' : '0', cfg->host,
+        cfg->port);
+    if (ver == NTRIP_V2) {
+        put(&k, "Ntrip-Version: Ntrip/2.0\r\n");
+    }
+    put(&k, "User-Agent: NTRIP rmx-gateway/1.0\r\n");
+    if (cfg->user && cfg->user[0]) {
+        const char *parts[3] = { cfg->user, ":", cfg->password ? cfg->password : "" };
         put(&k, "Authorization: Basic ");
-        put_base64(&k, (const uint8_t *)cred, (size_t)n);
-        for (volatile char *v = cred; v < cred + sizeof(cred); v++) {
-            *v = 0;   /* volatile: a memset of a dead buffer may be optimised away */
-        }
+        put_base64(&k, parts, 3);
         put(&k, "\r\n");
     }
-    put(&k, "\r\n");
-    if (gga) {
-        put(&k, "%s", gga);
+    if (ver == NTRIP_V2) {
+        if (gl) {
+            put(&k, "Ntrip-GGA: %.*s\r\n", (int)gl, gga);
+        }
+        put(&k, "Connection: close\r\n\r\n");
+    } else {
+        put(&k, "\r\n");
+        if (gl) {
+            put(&k, "%.*s\r\n", (int)gl, gga);
+        }
     }
     return k.over ? -1 : (int)k.n;
+}
+
+int ntrip_request_masked(const char *request, size_t len, char *out, size_t cap)
+{
+    static const char AUTH[] = "Authorization: ";
+    static const char MASK[] = "Authorization: ***";
+    size_t n = 0;
+    size_t i = 0;
+    while (i < len) {
+        bool line_start = i == 0 || request[i - 1] == '\n';
+        if (line_start && len - i >= sizeof(AUTH) - 1 && memcmp(request + i, AUTH, sizeof(AUTH) - 1) == 0) {
+            if (n + sizeof(MASK) - 1 >= cap) {
+                return -1;
+            }
+            memcpy(out + n, MASK, sizeof(MASK) - 1);
+            n += sizeof(MASK) - 1;
+            while (i < len && request[i] != '\r' && request[i] != '\n') {
+                i++;   /* skip the credentials */
+            }
+            continue;
+        }
+        if (n + 1 >= cap) {
+            return -1;
+        }
+        out[n++] = request[i++];
+    }
+    if (cap == 0) {
+        return -1;
+    }
+    out[n] = '\0';
+    return (int)n;
 }
 
 /* ----------------------------------------------------------------- response */
@@ -141,8 +206,9 @@ static bool contains_ci(const char *buf, size_t len, const char *needle)
     return false;
 }
 
-ntrip_resp_t ntrip_parse_response(const char *buf, size_t len, size_t *hdr_len)
+ntrip_resp_t ntrip_parse_response(const char *buf, size_t len, size_t *hdr_len, bool *chunked)
 {
+    *chunked = false;
     const char *eol = find_line_end(buf, len);
     if (!eol) {
         return len >= NTRIP_HDR_MAX ? NTRIP_RESP_ERROR : NTRIP_RESP_MORE;
@@ -190,9 +256,7 @@ ntrip_resp_t ntrip_parse_response(const char *buf, size_t len, size_t *hdr_len)
     if (contains_ci(buf, end, "content-type: gnss/sourcetable")) {
         return NTRIP_RESP_NO_MOUNT;
     }
-    if (contains_ci(buf, end, "transfer-encoding: chunked")) {
-        return NTRIP_RESP_ERROR;   /* rev 2 chunking: not supported (we ask for rev 1) */
-    }
+    *chunked = contains_ci(buf, end, "transfer-encoding: chunked");
     *hdr_len = end;
     return NTRIP_RESP_STREAMING;
 }
@@ -248,4 +312,111 @@ bool nmea_gga_has_position(const char *s, size_t len)
     size_t q = start[5];
     bool fix = flen[5] == 1 && s[q] >= '1' && s[q] <= '9';
     return flen[1] > 0 && ns && flen[3] > 0 && ew && fix;
+}
+
+/* ------------------------------------------------------------------ chunked */
+
+enum { CH_SIZE, CH_EXT, CH_SIZE_LF, CH_DATA, CH_DATA_CR, CH_DATA_LF, CH_DONE };
+
+int ntrip_chunk_decode(ntrip_chunk_t *d, const uint8_t *in, size_t len, uint8_t *out)
+{
+    size_t w = 0;
+    for (size_t i = 0; i < len && d->state != CH_DONE; i++) {
+        uint8_t c = in[i];
+        switch (d->state) {
+        case CH_SIZE: {
+            int h = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                    : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+            if (h >= 0) {
+                if (++d->digits > 7) {
+                    return -1;   /* 256 MB or more: nonsense */
+                }
+                d->left = d->left << 4 | (uint32_t)h;
+            } else if (d->digits == 0) {
+                return -1;
+            } else if (c == ';' || c == ' ' || c == '\t') {
+                d->state = CH_EXT;
+            } else if (c == '\r') {
+                d->state = CH_SIZE_LF;
+            } else {
+                return -1;
+            }
+            break;
+        }
+        case CH_EXT:   /* chunk extensions are ignored */
+            if (c == '\r') {
+                d->state = CH_SIZE_LF;
+            }
+            break;
+        case CH_SIZE_LF:
+            if (c != '\n') {
+                return -1;
+            }
+            d->digits = 0;
+            if (d->left == 0) {
+                d->state = CH_DONE;   /* trailers and the final CR LF are ignored */
+                d->done = true;
+            } else {
+                d->state = CH_DATA;
+            }
+            break;
+        case CH_DATA: {
+            size_t n = len - i < d->left ? len - i : d->left;
+            memmove(out + w, in + i, n);
+            w += n;
+            d->left -= (uint32_t)n;
+            i += n - 1;
+            if (d->left == 0) {
+                d->state = CH_DATA_CR;
+            }
+            break;
+        }
+        case CH_DATA_CR:
+            if (c != '\r') {
+                return -1;
+            }
+            d->state = CH_DATA_LF;
+            break;
+        default:   /* CH_DATA_LF */
+            if (c != '\n') {
+                return -1;
+            }
+            d->state = CH_SIZE;
+            break;
+        }
+    }
+    return (int)w;
+}
+
+/* --------------------------------------------------------------- GGA timing */
+
+bool ntrip_gga_offer(ntrip_gga_t *g, const char *s, size_t len)
+{
+    while (len > 0 && (s[len - 1] == '\r' || s[len - 1] == '\n')) {
+        len--;
+    }
+    if (len + 2 > NTRIP_GGA_MAX || !nmea_gga_has_position(s, len)) {
+        return false;
+    }
+    memcpy(g->gga, s, len);
+    memcpy(g->gga + len, "\r\n", 3);
+    g->have = true;
+    g->fresh = true;
+    return true;
+}
+
+const char *ntrip_gga_due(ntrip_gga_t *g, int64_t now_ms)
+{
+    if (!g->have || (!g->fresh && g->sent_once && now_ms - g->sent_ms < NTRIP_GGA_PERIOD_MS)) {
+        return NULL;
+    }
+    g->fresh = false;
+    g->sent_once = true;
+    g->sent_ms = now_ms;
+    return g->gga;
+}
+
+void ntrip_gga_reconnected(ntrip_gga_t *g)
+{
+    g->fresh = g->have;
 }
