@@ -27,6 +27,7 @@ Related: [Mower-Gateway](Mower-Gateway) (what the firmware does), [Mower-Protoco
 | `ota` | 725 | chunk download task, image checks, rollback timer, final ack after restart |
 | `gwstate` | 175 | boot counter, clock, NVS `gw` helpers, `gateway/state` |
 | `metrics` | ~750 | catalogue, telemetry, monitor sessions, CPU load; its 100 ms tick republishes the catalogue on the server-link edge |
+| `ntrip` | ~490 | NTRIP client: settings in NVS (`ntrip_set`/`ntrip_clear`), TCP session to the caster, GGA schedule, corrections sink, `ntrip` state, `usage.ntrip.*` ([#63](https://github.com/rmx-lt/rmx-mower-gateway/issues/63)) |
 
 ### 1.1 Dependency graph
 
@@ -215,7 +216,7 @@ The decisions of steps 1 and 3 are pure and host-tested in `components/rmx_codec
 The task watchdog alone does not fit: `cell` legitimately blocks for minutes inside esp_modem calls. Liveness counters checked by the supervisor do, and short-loop tasks (`bl_rx`, `bl_tx`, supervisor) also join the task watchdog.
 
 **Implemented in [#79](https://github.com/rmx-lt/rmx-mower-gateway/issues/79)** (verified on the board 2026-11-20):
-- `main/gw_tasks.h/.c`: the table of today's tasks (`remote_cmd` 4/6144, `gw_tick` 3/6144, `gw_signal` 2/4096, `cell_wd` 5/4096, `supervisor` 3/6144, `ota` 3/12288, `devcert` 3/6144). Every module creates its task with `gw_task_create()`. The board link and ntrip tasks join with #62 and #63.
+- `main/gw_tasks.h/.c`: the table of today's tasks (since #63 also `ntrip` 6/4096, watched: it counts at least once a second): (`remote_cmd` 4/6144, `gw_tick` 3/6144, `gw_signal` 2/4096, `cell_wd` 5/4096, `supervisor` 3/6144, `ota` 3/12288, `devcert` 3/6144). Every module creates its task with `gw_task_create()`. The board link and ntrip tasks join with #62 and #63.
 - Liveness: `remote_cmd` (queue wait capped at 10 s), `gw_tick` and `gw_signal` call `gw_task_alive()` once per loop. The supervisor restarts the board when one has not counted for `CONFIG_GATEWAY_LIVE_STALE_S` (120 s), never during an update. `cell_wd` is not watched: it blocks for minutes inside esp_modem while redialling, and step 3 covers it. `devcert` waits on the console.
 - Ladder: the thresholds are `CONFIG_GATEWAY_REC_MQTT_DOWN_S` (300) and `CONFIG_GATEWAY_REC_LINK_DOWN_S` (1800). Step 1 calls `cell_reconnect()` (command mode, then the redial task dials again).
 - Not done: the task watchdog join. Here the task watchdog only logs (`CONFIG_ESP_TASK_WDT_PANIC` off, 5 s), and the supervisor can block on a publish for longer than that. The core dump went to flash in [#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110) (owner decision 2026-11-20).
@@ -318,7 +319,7 @@ esp_err_t metrics_register(const metric_def_t *def, metric_read_fn fn, void *ctx
 - `gateway/state` fields after the fixed ones (protocol, boot, firmware, previous, partition) come from `gw_state_set`, in the order first set; `autopilot_link` ("down"), `ntrip` ("off") and `operator` (null) exist from boot. `cell` sets `operator` after each AT+COPS read.
 - Who registers what: `cell_start()` registers `signal.rssi`; the first `usage_attach_netif()` registers `usage.total.up|down`; `metrics_start()` registers the `system.*` metrics and then the `usage.mqtt.up|down.*` families. Within a catalogue part, metrics come in registration order. The same name again is ignored; a new name after the catalogue went out is refused (bump `CATALOGUE_REVISION` when the set changes).
 - Monitor sessions (§15) live in `monitor.c`; `metrics.c` keeps the catalogue, telemetry and the 100 ms tick.
-- `usage_count(name, up, bytes)` comes with its first user, NTRIP ([#63](https://github.com/rmx-lt/rmx-mower-gateway/issues/63)).
+- `usage_count(name, up, bytes)` was not needed: `ntrip` counts its own socket bytes and registers `usage.ntrip.up|down` itself ([#63](https://github.com/rmx-lt/rmx-mower-gateway/issues/63)); a shared helper can come with a second user.
 
 ### 5.5 `board_link.h` and `ntrip.h`
 
@@ -337,6 +338,8 @@ ntrip_state_t ntrip_state(void);
 ```
 
 Pure parts in `rmx_codec`: `cobs_encode/decode`, `crc16_ccitt_false`, `bl_frame_pack/parse`, `bl_reliable_*` (sequence, ack, resend decisions from `now_ms`), `bl_queue_*` (the 60 s / 64 KB ring, drop-oldest), `ntrip_build_request`, `ntrip_parse_response`, `nmea_gga_has_position`.
+
+**Implemented in [#63](https://github.com/rmx-lt/rmx-mower-gateway/issues/63)** (verified on the board 2026-11-20, without the autopilot): `main/ntrip.h` has `ntrip_start()`, `ntrip_feed_gga()` and `ntrip_set_sink()` (the board link's CORRECTIONS writer, #62); the state is reported through `gw_state_set("ntrip", …)` and `GW_NTRIP_STREAM` rather than an `ntrip_state()` getter. It stays in `main/` (no `components/ntrip/`): it needs `remote_cmd`, `settings`, `metrics` and `gw_link`. Details in [Mower-Gateway](Mower-Gateway) "NTRIP client".
 
 The NTRIP parts are implemented and host-tested in [#96](https://github.com/rmx-lt/rmx-mower-gateway/issues/96) (`ntrip_codec.h`). Rev 1 (`HTTP/1.0`, raw stream, GGA after the headers) and rev 2 (`HTTP/1.1`, `Ntrip-Version: Ntrip/2.0`, GGA in `Ntrip-GGA`, chunked answers decoded by `ntrip_chunk_decode`) since [#103](https://github.com/rmx-lt/rmx-mower-gateway/issues/103), which also added the GGA schedule (`ntrip_gga_offer/due`: a new sentence with a position at once, the last one again every 10 s) and `ntrip_request_masked()`: the client logs the masked copy, never the request, which holds the Base64 credentials. Settings with control characters (or spaces in host and mount point, `:` in the user) are refused, so a stored setting cannot inject a header.
 
