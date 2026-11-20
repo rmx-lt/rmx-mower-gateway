@@ -217,7 +217,7 @@ static void restart_soon(void)
 
 static void handle(const char *json, size_t len)
 {
-    ESP_LOGI(TAG, "<- %.*s", len > 300 ? 300 : (int)len, json);
+    /* Never log the payload: arguments can be secrets (ntrip_set's password). */
     cJSON *cmd = cJSON_ParseWithLength(json, len);
     const char *id = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "id"));
     const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(cmd, "cmd"));
@@ -225,11 +225,13 @@ static void handle(const char *json, size_t len)
     bool restart = false;
 
     if (!cJSON_IsObject(cmd) || !valid_id(id) || !name || !name[0] || strlen(name) > 32) {
+        ESP_LOGW(TAG, "<- malformed command (%u bytes)", (unsigned)len);
         cmd_ack(id && valid_id(id) ? id : "", name, "failed", "bad_request",
                 "need a JSON object with an \"id\" (1-64 chars of A-Za-z0-9_-) and a \"cmd\"", NULL);
         cJSON_Delete(cmd);
         return;
     }
+    ESP_LOGI(TAG, "<- %s id %s", name, id);
     if (repeat_ack(id)) {
         cJSON_Delete(cmd);
         return;
