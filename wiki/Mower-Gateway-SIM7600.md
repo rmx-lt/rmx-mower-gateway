@@ -36,6 +36,30 @@ Do not commit IMEI, ICCID or IMSI anywhere (public repos).
   data mode from the previous boot → firmware must detect this
   (`esp_modem_set_mode(ESP_MODEM_MODE_DETECT)`) or send `+++` and wait.
 
+## Power saving (verified 2026-11-20 unless marked)
+
+| What | Result |
+|---|---|
+| UART sleep: `AT+CSCLK=1`, DTR (GPIO32) HIGH | `AT` still answered 2 s later; after ~14 s idle no answer to `AT` (UART asleep) |
+| Wake: DTR LOW | `AT` → OK at once, `+CSQ: 27,99`: still registered. `AT+CSCLK=0` restores the default (`+CSCLK: 0`) |
+| RI (GPIO33) | `AT+CFGRI?` → `+CFGRI: 0,60,120` (default: RI pulses for SMS and URCs); stays HIGH when idle |
+| PSM | `AT+CPSMS?` → `+CPSMS:0,,,"01100000","00000000"` (off); settable (`AT+CPSMS=?` lists the timers) |
+| eDRX | `AT+CEDRXS?` → empty (off); `AT+CEDRXRDP` → `CEDRXRDP: 0`: the network gave no eDRX parameters |
+| Cell (2026-11-20) | LTE EUTRAN band 28 at this bench (band 1 on 2026-10-19), `+CSQ` 27–28 |
+
+From the Sleep Mode application note (not measured): the module sleeps only when its UART may sleep (DTR HIGH after `CSCLK=1`)
+and no other activity is pending; it wakes itself for incoming calls, SMS and URCs and signals the host on RI.
+Not tested: whether PPP data survives a UART sleep (downlink data while asleep), current draw in each state.
+
+**Recommendation.** While the mower works, keep the modem awake (DTR LOW, PPP up): the link must answer within seconds and
+the gateway's draw is small next to the drive motors (to be measured: [rmx-mower-gateway#99](https://github.com/rmx-lt/rmx-mower-gateway/issues/99)).
+For a parked mode, the simple levers are modem off (`AT+CPOF` / PWRKEY) or RF off (`AT+CFUN=0`/`4`) with a wake timer, not CSCLK
+sleep with PPP. PSM/eDRX need network support and do not fit an always-on MQTT link.
+
+ESP32 side (ESP-IDF docs, not measured): automatic light sleep does not fit while PPP runs, because UART1 cannot receive in
+light sleep and a UART wakeup loses the first bytes (ESP FAQ). Dynamic frequency scaling (`CONFIG_PM_ENABLE`, e.g. 80–240 MHz,
+no light sleep) is the only ESP-side saving compatible with PPP; deep sleep fits only a parked mode, where the modem is off too.
+
 ## Registration checklist
 
 ```
@@ -59,8 +83,9 @@ found only one weak foreign GSM cell.
 | How | `ATD*99#` → PPP; lwIP on the ESP32; esp_modem component | `AT+NETOPEN`, `AT+CCHOPEN` (TLS sockets), `AT+CMQTT*`, `AT+HTTP*` |
 | TLS | mbedTLS on the ESP32: TLS 1.2/1.3, full control, cert bundle | modem's TLS: **max TLS 1.2**, SNI **off by default**, CA file must be uploaded |
 | MQTT lib | esp-mqtt (`espressif/mqtt`) — the gateway firmware has no HTTP client | parse AT URCs yourself (TinyGSM does this in Arduino) |
-| AT while online | needs CMUX (`AT+CMUX=0`, supported) or pausing PPP | always available |
-| Status | **chosen path** for the probe (see 04) | **verified working** as a fallback (below) |
+| AT while online | needs CMUX (`AT+CMUX=0`, works, see 04) or pausing PPP (chosen) | always available |
+| Client identity | board-made P-256 key in ESP NVS, never leaves the ESP | key and certificate would have to sit in the modem file system: a second identity |
+| Status | **chosen path** (see 04) | TLS and MQTT verified working (below); **not used as a fallback** (see "Recommendation") |
 
 ### B. Modem TLS — verified commands (2026-10-19, firmware B04)
 
@@ -97,8 +122,8 @@ AT+CCHCLOSE=0 / AT+CCHSTOP
 - `isrgx1.pem` is now stored in the modem's file system (survives power cycles).
 - The CCHSEND length must be exact; a short length silently truncates the request.
 
-MQTT over the modem (from the MQTT(S) app note + LilyGo TinyGSM `TinyGsmMqttA76xx.h`,
-not yet run on our unit):
+MQTT over the modem (from the MQTT(S) app note + LilyGo TinyGSM `TinyGsmMqttA76xx.h`;
+connect verified on our unit 2026-11-20, see below):
 
 ```
 AT+CMQTTSTART                                 → +CMQTTSTART: 0
@@ -113,6 +138,39 @@ AT+CMQTTDISC=0,120 / AT+CMQTTREL=0 / AT+CMQTTSTOP
 ```
 
 Note: the URL is always `tcp://` even for TLS; TLS is selected by ACCQ's 3rd arg + SSLCFG.
+
+### B. Modem MQTT — verified 2026-11-20 (fw B04, `tools/at_bridge`)
+
+With SSL context 0 set as above (`sslversion` 4 = all, `authmode` 1, `enableSNI` 1, `cacert` `isrgx1.pem`,
+still in the modem file system from 2026-10-19) and a deliberately invalid login on the password listener:
+
+```
+AT+CMQTTSTART                                → OK, +CMQTTSTART: 0
+AT+CMQTTACCQ=0,"kb-smoke-test",1             → OK
+AT+CMQTTSSLCFG=0,0                           → OK
+AT+CMQTTCONNECT=0,"tcp://mqtt.rmx.lt:8883",60,1,"kb-smoke-test","not-a-real-password"
+                                             → OK, +CMQTTCONNECT: 0,31   (31 = "connection refused: not authorized" = CONNACK 5)
+AT+CMQTTDISC=0,60                            → +CMQTTDISC: 0,11, ERROR   (11 = no connection: expected after a refused CONNECT)
+AT+CMQTTREL=0 / AT+CMQTTSTOP                 → OK, +CMQTTSTOP: 0
+```
+
+This proves modem TLS 1.2 with SNI and the MQTT handshake reach Mosquitto, the same proof as `ppp_smoke`'s CONNACK 5.
+Not tested: SUB/PUB, the client-certificate listener 8884 (`AT+CSSLCFG="clientcert"`/`"clientkey"`), 4 KB firmware chunks
+(the URC path splits payloads into `+CMQTTRXPAYLOAD` parts; the AT manual limits a payload to 10240 bytes).
+`AT+CMQTTSTART=?` returns ERROR (no test form).
+
+### Recommendation: no modem-MQTT fallback
+
+Do not build the AT MQTT path as a fallback to PPP:
+
+- **Identity.** Login is by client certificate; the board's key is made in and never leaves the ESP's NVS (Mower-Gateway "Identity").
+  The modem's TLS needs its own key file in the modem file system, readable by anyone with the UART: a second, weaker identity.
+- **Same failure domain.** Both paths use the same modem, SIM, radio and PDP context. What breaks PPP (no coverage, modem hung) breaks
+  AT MQTT too; the existing recovery (redial, PWRKEY power cycle) covers both.
+- **Cost.** A second MQTT client (URC parser, chunk reassembly, topic routing) with TLS 1.2 only and no host tests,
+  for a path that would almost never run.
+
+Keep the verified AT sequences here for diagnostics (e.g. testing the broker from the board without the ESP stack).
 
 ## Useful AT commands (tested on our unit unless marked)
 

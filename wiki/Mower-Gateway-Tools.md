@@ -39,7 +39,8 @@ Command prefixes: `wait=<ms>:` (timeout), `expect=<text>|` (wait for a URC such 
 verified TLS test: see [Mower-Gateway-SIM7600](Mower-Gateway-SIM7600).
 
 Bridge commands (type a line starting with `~`): `~status` (STATUS/RING/FLIGHT/DTR levels),
-`~pwr` (500 ms PWRKEY pulse — toggles power!), `~pwroff` (3 s), `~flight0`/`~flight1`, `~baud N`.
+`~pwr` (500 ms PWRKEY pulse — toggles power!), `~pwroff` (3 s), `~flight0`/`~flight1`, `~dtr0`/`~dtr1`
+(DTR LOW/HIGH; with `AT+CSCLK=1`, HIGH lets the modem sleep — verified 2026-11-20), `~baud N`.
 
 ## Reading the ESP log without `idf.py monitor`
 

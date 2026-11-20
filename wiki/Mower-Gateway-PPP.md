@@ -95,18 +95,44 @@ If `ATO` failed, the code puts the DCE into command mode and lets the watchdog r
 `esp_modem_at()` returns the last response line before `OK` (truncated to
 `CONFIG_ESP_MODEM_C_API_STR_MAX` = 128 chars).
 
-Why not CMUX: untested on this board, it changes how the whole DTE/redial path works
-(mode transitions, exit issues reported on SIMCom 76xx), and GPS is read only on demand, so a
-2 s pause per read is cheap. Revisit CMUX if AT is needed often (e.g. periodic GNSS + signal).
+Why not CMUX (re-checked on the board 2026-11-19, see the next section): CMUX works, but it
+changes the whole DTE/redial path (mode transitions, a failed re-entry), and today the firmware
+needs AT only once a minute (signal reading), so a 2 s pause is cheap. Revisit when AT is needed
+often or the 2 s gap starts to hurt a stream (NTRIP corrections, board-link relay).
 
-## AT commands while online: CMUX
+## AT commands while online: CMUX (bench, verified 2026-11-19)
 
-`AT+CMUX=?` → `(0),(0),(1-8),(1-1500),…` — basic-mode CMUX works on the SIM7600.
+`AT+CMUX=?` → `(0),(0),(1-8),(1-1500),…` — basic-mode CMUX only.
 `esp_modem_set_mode(dce, ESP_MODEM_MODE_CMUX)` gives one virtual channel for PPP and one
-for AT (signal quality, GNSS) at the same time. Example: `examples/simple_cmux_client`.
-Not tested on our board yet. Known reports: CMUX exit issues on A7670, truncated AT
-answers under heavy PPP load on SIMCom 76xx (esp32.com forum). Without CMUX, the only
-way to send AT while online is `esp_modem_pause_net()` (there is one UART, no second AT port).
+for AT at the same time. Example: `examples/simple_cmux_client`. Without CMUX, the only
+way to send AT while online is `esp_modem_pause_net()` (one UART, no second AT port).
+
+Bench: `tools/ppp_smoke` changed to enter CMUX, then run AT (`AT+CSQ` + `AT+CPSI?`, every 200 ms)
+on the command channel while PPP carried 5 HTTPS GETs and one MQTTS connect (esp_modem 2.1.0,
+ESP-IDF 6.1, modem fw B04, 115200 baud, no flow control). The bench code is not in the repo.
+
+| Check | Result (runs) |
+|---|---|
+| Enter CMUX from command mode, PPP up | 244–344 ms to IP (3 of 3) |
+| AT on the command channel during PPP traffic | 84–85 ok, 0 failed per run, 130–280 ms each, max 490–620 ms (3 of 3) |
+| PPP during AT | HTTPS `/health` 200 in 5.1–5.5 s each, MQTTS CONNACK 5 in ~5.1 s: same as without CMUX |
+| Exit CMUX to command mode (`ESP_MODEM_MODE_COMMAND`) | `ESP_OK` in ~70 ms, `AT` answers (3 of 3) |
+| **Re-enter CMUX after an exit**, same modem session | entered `ESP_OK`, but **no IP within 60 s** (1 of 1) |
+| ESP reset while the modem is in CMUX: `ESP_MODEM_MODE_DETECT` | reports mode 3 (`CMUX_MANUAL`); `CMUX_MANUAL_EXIT` → command mode, `AT` OK (2 of 3); first run: exit `ESP_FAIL` and entering CMUX failed (earlier bench code, cause not isolated) |
+| Heap | ~4.45 MB free (PSRAM), no change worth noting |
+
+What this means:
+
+- CMUX itself is stable on this board and removes the 2 s PPP gap: no truncated answers seen at a
+  200 ms AT rate under light PPP load (heavy load, e.g. a 700 KB OTA download, was not tested).
+- The weak spot is mode changes. A redial that leaves CMUX and enters it again did not get an IP.
+  A CMUX firmware must treat "leave CMUX" as a modem power cycle (or test `AT+CRESET`), and its
+  boot must handle a modem left in CMUX by the previous ESP boot (detect works, not every time).
+- The firmware's whole AT path (`cell_with_command_mode`, redial, power cycle) would change.
+
+**Recommendation: keep `esp_modem_pause_net()`** while AT is needed once a minute. Switch to CMUX
+only when a feature needs AT often while data flows; then implement the recovery rules above first
+(follow-up issue [rmx-mower-gateway#98](https://github.com/rmx-lt/rmx-mower-gateway/issues/98)).
 
 ## Robustness notes (for the real firmware)
 

@@ -7,6 +7,7 @@
  *   ~pwr     pulse PWRKEY (toggles modem power: on if off, off if on)
  *   ~status  print the STATUS pin, FLIGHT and DTR levels
  *   ~flight0 / ~flight1   drive the FLIGHT pin (1 = radio allowed)
+ *   ~dtr0 / ~dtr1         drive DTR (1 lets the modem sleep after AT+CSCLK=1)
  *   ~baud N  change the ESP side baud rate of UART1
  */
 #include <stdio.h>
@@ -116,6 +117,10 @@ static void handle_bridge_cmd(char *line)
         gpio_set_level(PIN_FLIGHT, 0); print_status();
     } else if (!strcmp(line, "~flight1")) {
         gpio_set_level(PIN_FLIGHT, 1); print_status();
+    } else if (!strcmp(line, "~dtr0")) {
+        gpio_set_level(PIN_DTR, 0); print_status();
+    } else if (!strcmp(line, "~dtr1")) {
+        gpio_set_level(PIN_DTR, 1); print_status();
     } else if (!strncmp(line, "~baud ", 6)) {
         int b = atoi(line + 6);
         uart_set_baudrate(MODEM_UART, b);
