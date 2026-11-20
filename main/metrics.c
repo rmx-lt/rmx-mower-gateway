@@ -22,7 +22,7 @@
 static const char *TAG = "metrics";
 
 /* Bump when the catalogue changes (names, units, periods, rates, ...). */
-#define CATALOGUE_REVISION 1
+#define CATALOGUE_REVISION 2   /* 2: usage.ntrip.up|down (#63) */
 
 #define TICK_MS     100
 #define MAX_METRICS 32

@@ -17,7 +17,7 @@ the retained status `mower/<name>/gateway/status` (last will `offline`), the ret
 the metric catalogue `gateway/metrics/…`, `gateway/telemetry` (signal, system, data usage), commands on
 `gateway/cmd` with acks on `gateway/cmd/ack`, monitor streams on `gateway/monitor`. A new image is requested as MQTT
 chunks on `gateway/fw/req` and written from `gateway/fw/chunk`. Clean session, keep-alive 15 s. The firmware has no HTTPS
-client. The NTRIP client and the link to the autopilot board are not in the firmware yet (other issues).
+client. The NTRIP client runs (see "NTRIP client" below, issue 63); the link to the autopilot board is not in the firmware yet (issue 62).
 Verified 2026-11-15 on the board over LTE against the deployed server ([issue 65](https://github.com/rmx-lt/rmx-mower-gateway/issues/65)),
 commands sent through the server's API:
 an `ota` from 0.3.0 to 0.4.0 (749568 bytes) downloaded over `gateway/fw`, restarted into `ota_1` and sent the final `done`
@@ -116,12 +116,51 @@ tools\mqtt_cmd.ps1 ping -Id c-1 -Repeat 1       # the same id twice: the same ac
 tools\mqtt_watch.ps1 -Seconds 120               # state, catalogue, telemetry, monitor, acks
 ```
 
-Commands: `ping restart ota monitor_start monitor_stop` ([Mower-Protocol](Mower-Protocol) §5, §6.4, §15; details in
+Commands: `ping restart ota monitor_start monitor_stop ntrip_set ntrip_clear` ([Mower-Protocol](Mower-Protocol) §5, §6.4, §15; details in
 [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract)). Each carries
 `expires_at` (now + `-TtlS`, default 60 s). `status` and `gps` were removed (the modem's GNSS is not used; the data
-is in `gateway/state` and `gateway/telemetry`). `ntrip_set`, `ntrip_clear` and `autopilot_reset` are other issues
-(`unknown_cmd` / `failed`). The scripts log in as `app`; the broker forces client id `app`, so two of them at the same
+is in `gateway/state` and `gateway/telemetry`). `autopilot_reset` answers `failed` until issue 62 wires the line.
+`ntrip_set` carries the caster password, so the PC tool does not send it: rmx-server-app sends it from its environment
+(see "NTRIP client"). The scripts log in as `app`; the broker forces client id `app`, so two of them at the same
 time disconnect each other. Needs the Mosquitto clients for Windows and `ssh rmx-vps`.
+
+## NTRIP client
+
+`main/ntrip.c` (issue 63; Mower-Protocol §13, §6.2, §6.4). Firmware done and verified on the board 2026-11-20; the RTK
+fix itself waits for the autopilot (issue 62).
+
+- **Settings**: `ntrip_set` (`host`, `port`, `mountpoint`, `user`, `password`, each up to 64 characters) stores them in
+  NVS namespace `ntrip` (keys `host port mount user pass`) and reconnects at once; `ntrip_clear` erases them. Registered
+  with `CMD_SECRET_ARGS`: the command is never logged beyond its name and id. Settings the request cannot carry
+  (control characters, a space in host or mount point, `:` in the user, port out of range) get `bad_request`. The
+  password is only in NVS and in the request sent to the caster; the log names host, port and mount point only.
+- **Who sends the settings**: rmx-server-app (`internal/mower/ntrip.go`) from its `NTRIP_*` environment. It sends
+  `ntrip_set` when the gateway's state arrives and it has no fingerprint of acknowledged settings, a different one,
+  or the state says `ntrip: "off"`; so after `ntrip_clear` the server sends the settings again within a second.
+  Removing them for good means removing `NTRIP_*` on the server (it then sends `ntrip_clear`).
+- **Session**: its own TCP socket over PPP (task `ntrip`, priority 6, 4096 stack, watched by the liveness check).
+  NTRIP rev 1 (`HTTP/1.0`, the caster answers `ICY 200 OK`), the GGA sentence after the headers and then again every
+  10 s (LitPOS needs it), corrections to the sink that the board link sets (`ntrip_set_sink`, issue 62; until then
+  they are counted and dropped). No bytes for 30 s, a closed socket or a PPP loss end the session; the next try is
+  10 s later, doubling to 120 s; a refused login or mount point waits 120 s.
+- **State**: `ntrip` in `gateway/state`: `off` (no settings), `waiting` (no GGA with a position yet; `ntrip_feed_gga`
+  from the board link), `connecting`, `streaming`, `error` (401 or no such mount point). `streaming` sets the
+  `GW_NTRIP_STREAM` link bit (heartbeat bit 2 once the board link exists).
+- **Metrics**: `usage.ntrip.up|down` (bytes of the TCP payload: request, positions, answer, corrections), part `usage`,
+  catalogue revision 2.
+- **Bench without the autopilot**: `CONFIG_GATEWAY_TEST_NTRIP_GGA=y` (default off) feeds a fixed GGA of a public
+  place (Vilnius Cathedral Square) at boot.
+
+Verified 2026-11-20 with the test GGA, against the server's caster settings:
+- the server sent `ntrip_set` on the first state with `ntrip: "off"`; the client answered `done`, the caster
+  `ICY 200 OK` 0.4 s later, state `streaming`;
+- corrections about 1.1 KB/s: `usage.ntrip.down` 68 009 → 135 372 bytes in 60 s, `usage.ntrip.up` 569 → 1001
+  (one GGA per 10 s);
+- after a reset the stored settings streamed 6 s after boot, before MQTT was up;
+- `ntrip_clear` → `done`, state `off` within 1 s (then the server sent the settings again, streaming 0.2 s later);
+- a forced PPP drop (`cell_reconnect()` from a bench-only command): PPP back after 2 s, streaming again 10.5 s after
+  the loss (the 10 s retry);
+- the `ntrip` task's smallest free stack was 2420 of 4096 bytes.
 
 ## Firmware updates (OTA)
 

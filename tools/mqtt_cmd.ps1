@@ -2,6 +2,7 @@
 #
 #   tools\mqtt_cmd.ps1 ping
 #   tools\mqtt_cmd.ps1 restart
+#   tools\mqtt_cmd.ps1 ntrip_clear                     # the server sends ntrip_set again when the state shows ntrip off
 #   tools\mqtt_cmd.ps1 ota -Version 0.4.0 -Size 851234   # file = <version>.bin (tools\release.ps1 uploads it)
 #   tools\mqtt_cmd.ps1 monitor_start -Session m-1 -Metrics usage.total.up,usage.total.down -Rate 2 -Hold 20
 #   tools\mqtt_cmd.ps1 monitor_stop -Session m-1

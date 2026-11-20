@@ -65,11 +65,12 @@ static void supervisor_task(void *arg)
     rec_state_t rec = { 0 };
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000));   /* a link event, or once a second */
-        if (mqtt_link_wait_ready(0)) {
+        bool ready = mqtt_link_wait_ready(0);
+        if (ready) {
             ota_confirm();   /* a new image that reaches the broker is good; cheap once confirmed */
         }
         bool up = gw_link_get() & GW_SERVER_LINK_UP;
-        if (up && !was_up && !mqtt_link_wait_ready(0)) {
+        if (up && !was_up && !ready) {
             up = false;   /* the first state waits for ota_confirm() above, which stores "previous" (#108) */
         }
         if (up && !was_up) {
