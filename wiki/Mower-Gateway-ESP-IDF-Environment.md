@@ -69,7 +69,9 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 
 Notes:
 - The gateway firmware uses [`partitions.csv`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/partitions.csv): NVS 24 KB, otadata, two
-  **4 MB OTA slots**, ~7.9 MB `storage`. Its image is 833 KB (2026-10-19).
+  **4 MB OTA slots**, a 128 KB `coredump` partition at 0x820000 ([#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110), 2026-11-20, carved from the start of `storage`
+  so nothing else moved), ~7.75 MB `storage`. Its image is 756 KB (2026-11-20). A partition table change needs a USB flash:
+  `pio run -e gateway -t upload` writes bootloader, table, otadata and the app, and leaves NVS untouched (key and chain survived, verified 2026-11-20).
 - The default partition table has a **1 MB** factory app. The smoke test
   (esp_modem + PPP + esp_http_client + esp-mqtt + full cert bundle) is already
   **808 KB** (`idf.py size`). For the real firmware use a custom partition table

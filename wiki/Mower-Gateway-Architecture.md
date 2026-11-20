@@ -93,7 +93,7 @@ Public functions return `esp_err_t` or `bool`; protocol error codes are string l
 ### 1.5 Memory, watchdog, logging, config
 
 - **Memory**: PSRAM on, `SPIRAM_USE_MALLOC`. Steady state is mostly static; JSON is built with cJSON on the heap per message; MQTT fragments over 8192 bytes are reassembled into one heap buffer (limit 128 KB). Buffers: modem UART RX 8192 / TX 2048, DTE 4096, MQTT in 8192 / out 4608.
-- **Watchdog**: not set in `sdkconfig.defaults`, so the IDF defaults apply (task watchdog on the idle tasks only). No firmware task subscribes to it; no core dump partition in `partitions.csv`.
+- **Watchdog**: not set in `sdkconfig.defaults`, so the IDF defaults apply (task watchdog on the idle tasks only). No firmware task subscribes to it. (Core dump to flash since [#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110), see Mower-Gateway-Tools.)
 - **Logging**: one `TAG` per module. Every QoS 1 publish and every received command is logged at INFO with up to 300 bytes of payload.
 - **Config**: Kconfig (`Kconfig.projbuild`) holds build-time values: APN, broker URI, OTA confirm time, OTA minimum signal. NVS holds runtime state: `gw` (boot, OTA state, previous version, legacy flag), `creds` (key, chain). No NVS encryption ([rmx-mower-gateway#49](https://github.com/rmx-lt/rmx-mower-gateway/issues/49)).
 - **Tests**: none off the board.
@@ -218,7 +218,7 @@ The task watchdog alone does not fit: `cell` legitimately blocks for minutes ins
 - `main/gw_tasks.h/.c`: the table of today's tasks (`remote_cmd` 4/6144, `gw_tick` 3/6144, `gw_signal` 2/4096, `cell_wd` 5/4096, `supervisor` 3/6144, `ota` 3/12288, `devcert` 3/6144). Every module creates its task with `gw_task_create()`. The board link and ntrip tasks join with #62 and #63.
 - Liveness: `remote_cmd` (queue wait capped at 10 s), `gw_tick` and `gw_signal` call `gw_task_alive()` once per loop. The supervisor restarts the board when one has not counted for `CONFIG_GATEWAY_LIVE_STALE_S` (120 s), never during an update. `cell_wd` is not watched: it blocks for minutes inside esp_modem while redialling, and step 3 covers it. `devcert` waits on the console.
 - Ladder: the thresholds are `CONFIG_GATEWAY_REC_MQTT_DOWN_S` (300) and `CONFIG_GATEWAY_REC_LINK_DOWN_S` (1800). Step 1 calls `cell_reconnect()` (command mode, then the redial task dials again).
-- Not done: the task watchdog join. Here the task watchdog only logs (`CONFIG_ESP_TASK_WDT_PANIC` off, 5 s), and the supervisor can block on a publish for longer than that. Core dump: [#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110).
+- Not done: the task watchdog join. Here the task watchdog only logs (`CONFIG_ESP_TASK_WDT_PANIC` off, 5 s), and the supervisor can block on a publish for longer than that. The core dump went to flash in [#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110) (owner decision 2026-11-20).
 - Board checks: a test build whose `ping` blocks `remote_cmd` for 200 s logged `restarting in 0 ms: task remote_cmd did not loop for 120 s` and booted clean. A test build with the clock shifted 400 days (TLS refused, PPP up) and thresholds 60/300 s logged `MQTT down with PPP up for 60 s: reconnecting the cell` every ~62 s (each redial got PPP back in about 150 ms), then `server link down too long` at 306 s.
 
 Free stack, smallest seen (bytes, high-water mark from the 60 s alive log `tasks: stack free`), over a normal run, an OTA, a restart and the redial test:

@@ -20,6 +20,7 @@
 #include "esp_netif_sntp.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_core_dump.h"
 #include "settings.h"
 #include "board.h"
 #include "cell.h"
@@ -63,6 +64,12 @@ void app_main(void)
     ESP_LOGI(TAG, "%s %s (IDF %s)", app->project_name, app->version, app->idf_ver);
 
     ESP_ERROR_CHECK(settings_init());
+    size_t dump_addr, dump_size;
+    if (esp_core_dump_image_check() == ESP_OK && esp_core_dump_image_get(&dump_addr, &dump_size) == ESP_OK) {
+        /* kept until the next crash overwrites it; read it over USB with esp-coredump (#110) */
+        ESP_LOGW(TAG, "core dump of an earlier crash in flash: %u bytes at 0x%x", (unsigned)dump_size,
+                 (unsigned)dump_addr);
+    }
     gw_boot_init();
     devcert_init();
     devcert_console_start();

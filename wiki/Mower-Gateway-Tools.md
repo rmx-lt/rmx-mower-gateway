@@ -42,6 +42,19 @@ Bridge commands (type a line starting with `~`): `~status` (STATUS/RING/FLIGHT/D
 `~pwr` (500 ms PWRKEY pulse — toggles power!), `~pwroff` (3 s), `~flight0`/`~flight1`, `~dtr0`/`~dtr1`
 (DTR LOW/HIGH; with `AT+CSCLK=1`, HIGH lets the modem sleep — verified 2026-11-20), `~baud N`.
 
+## Reading a core dump
+
+Since [#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110), a panic saves an ELF core dump to the `coredump` partition (128 KB at 0x820000), and the board restarts. On every boot the firmware logs
+`W gateway: core dump of an earlier crash in flash: <n> bytes at 0x820000` while a dump is stored. The dump stays until the next crash overwrites it.
+Read it over USB with the ELF of **the exact build that crashed** (keep `.pio/build/gateway/firmware.elf` of every image you flash):
+
+```bash
+IDF_PATH=C:/esp/v6.1/esp-idf C:/Espressif/tools/python/v6.1/venv/Scripts/python.exe -m esp_coredump   --chip esp32 --port COM6 info_corefile   --gdb C:/Espressif/tools/xtensa-esp-elf-gdb/17.1_20260402/xtensa-esp-elf-gdb/bin/xtensa-esp32-elf-gdb.exe   -s core.elf firmware.elf
+```
+
+- esp-coredump 1.17.2 (in the ESP-IDF 6.1 venv, not in PlatformIO's penv) refuses to run without `IDF_PATH` ("Please set up ESP-IDF").
+- Verified 2026-11-20 with a test build whose `ping` wrote to NULL. Serial: `Guru Meditation Error ... StoreProhibited`, then `esp_core_dump_flash: Core dump has been saved to flash` (22848 bytes). esp-coredump printed the crashed task with `#0 cmd_ping ... main/remote_cmd.c:241`, `#1 handle`, `#2 cmd_task`, plus all the other threads.
+
 ## Reading the ESP log without `idf.py monitor`
 
 Opening COM6 with pyserial toggles DTR/RTS and **resets the ESP32** (auto-reset circuit).
