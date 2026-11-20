@@ -456,9 +456,9 @@ static void ota_task(void *arg)
     s_progress = 100;
     /* §6.5 step 2: the command id is kept across the restart. The new image
      * sends the final ack (done, or rolled_back from the old image). */
-    gw_nvs_set(NVS_OTA_ID, s_req.id);
-    gw_nvs_set(NVS_OTA_VER, s_req.version);
-    gw_nvs_set(NVS_OTA_PREV, esp_app_get_description()->version);
+    const settings_kv_t open[] = { { NVS_OTA_ID, s_req.id }, { NVS_OTA_VER, s_req.version },
+                                   { NVS_OTA_PREV, esp_app_get_description()->version } };
+    gw_nvs_set_many(open, 3);
     restart_into_new_image();
     finish_task();
 }
@@ -654,8 +654,8 @@ bool ota_report_result(void)
     const char *version = esp_app_get_description()->version;
     if (strcmp(version, target) == 0) {
         /* the new image runs, confirmed and connected */
-        gw_nvs_set("prev", previous);
-        gw_nvs_set("prev_of", version);
+        const settings_kv_t prev[] = { { "prev", previous }, { "prev_of", version } };
+        gw_nvs_set_many(prev, 2);
         cJSON *res = cJSON_CreateObject();
         cJSON_AddStringToObject(res, "version", version);
         cJSON_AddStringToObject(res, "previous", previous);
@@ -667,8 +667,7 @@ bool ota_report_result(void)
         snprintf(text, sizeof(text), "%s did not confirm; %s runs again", target, version);
         cmd_ack(id, "ota", "failed", "rolled_back", text, NULL);
     }
-    gw_nvs_erase(NVS_OTA_ID);
-    gw_nvs_erase(NVS_OTA_VER);
-    gw_nvs_erase(NVS_OTA_PREV);
+    const settings_kv_t close[] = { { NVS_OTA_ID, NULL }, { NVS_OTA_VER, NULL }, { NVS_OTA_PREV, NULL } };
+    gw_nvs_set_many(close, 3);
     return true;
 }

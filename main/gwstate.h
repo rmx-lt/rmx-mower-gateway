@@ -7,10 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "cJSON.h"
+#include "settings.h"
 
 #define GW_PROTOCOL "0.1"
 
-/* After nvs_flash_init(): counts this boot (kept in NVS). */
+/* After settings_init(): counts this boot (kept in NVS). */
 void gw_boot_init(void);
 uint32_t gw_boot(void);
 
@@ -25,6 +26,8 @@ void gw_add_time(cJSON *obj, bool fraction);
 bool gw_nvs_get(const char *key, char *buf, size_t len);
 bool gw_nvs_set(const char *key, const char *val);
 void gw_nvs_erase(const char *key);
+/* Several keys with one commit (settings_set_many); val NULL erases. */
+bool gw_nvs_set_many(const settings_kv_t *kv, int n);
 
 /* Sets a module-owned field of gateway/state (§6.2), e.g. "operator" (cell),
  * "autopilot_link", "ntrip"; value NULL is JSON null. Copied; callable from any
