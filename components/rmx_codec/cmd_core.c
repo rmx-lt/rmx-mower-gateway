@@ -77,10 +77,12 @@ bool cmd_mem_store(cmd_mem_t *mem, const char *id, const char *ack, bool open, i
     if (!cmd_id_valid(id) || !ack) {
         return false;
     }
-    char *copy = strdup(ack);
+    size_t n = strlen(ack) + 1;
+    char *copy = malloc(n);   /* not strdup: strict C11 on the CI host */
     if (!copy) {
         return false;
     }
+    memcpy(copy, ack, n);
     cmd_mem_slot_t *s = find(mem, id);
     if (s) {
         free(s->ack);
