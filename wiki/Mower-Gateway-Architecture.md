@@ -276,13 +276,19 @@ void      cmd_ack(const char *id, const char *cmd, const char *state, const char
 
 ### 5.4 State and metrics
 
+Implemented in [#78](https://github.com/rmx-lt/rmx-mower-gateway/issues/78) (host build only; board check pending).
+
 ```c
-void      gw_state_set(const char *field, const char *value);   /* NULL = JSON null */
+void      gw_state_set(const char *field, const char *value);   /* NULL = JSON null, copied */
 void      gw_state_publish(bool force);
 typedef bool (*metric_read_fn)(void *ctx, double *out);
-esp_err_t metrics_register(const metric_def_t *def, metric_read_fn fn, void *ctx);  /* before start */
-void      usage_count(const char *name, bool up, size_t bytes);   /* e.g. "ntrip" */
+esp_err_t metrics_register(const metric_def_t *def, metric_read_fn fn, void *ctx);  /* before the first catalogue */
 ```
+
+- `gateway/state` fields after the fixed ones (protocol, boot, firmware, previous, partition) come from `gw_state_set`, in the order first set; `autopilot_link` ("down"), `ntrip` ("off") and `operator` (null) exist from boot. `cell` sets `operator` after each AT+COPS read.
+- Who registers what: `cell_start()` registers `signal.rssi`; the first `usage_attach_netif()` registers `usage.total.up|down`; `metrics_start()` registers the `system.*` metrics and then the `usage.mqtt.up|down.*` families. Within a catalogue part, metrics come in registration order. The same name again is ignored; a new name after the catalogue went out is refused (bump `CATALOGUE_REVISION` when the set changes).
+- Monitor sessions (§15) live in `monitor.c`; `metrics.c` keeps the catalogue, telemetry and the 100 ms tick.
+- `usage_count(name, up, bytes)` comes with its first user, NTRIP ([#63](https://github.com/rmx-lt/rmx-mower-gateway/issues/63)).
 
 ### 5.5 `board_link.h` and `ntrip.h`
 

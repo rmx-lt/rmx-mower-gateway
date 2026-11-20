@@ -26,6 +26,13 @@ bool gw_nvs_get(const char *key, char *buf, size_t len);
 bool gw_nvs_set(const char *key, const char *val);
 void gw_nvs_erase(const char *key);
 
+/* Sets a module-owned field of gateway/state (§6.2), e.g. "operator" (cell),
+ * "autopilot_link", "ntrip"; value NULL is JSON null. Copied; callable from any
+ * task, also before gw_boot_init(). Fields keep the order they were first set
+ * in; autopilot_link ("down"), ntrip ("off") and operator (null) exist from the
+ * start. Up to 8 fields of up to 31 chars. */
+void gw_state_set(const char *field, const char *value);
+
 /* Publishes gateway/state (retained, QoS 1) when it differs from the last
  * published one, or always with force. */
 void gw_state_publish(bool force);

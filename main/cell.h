@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include "esp_err.h"
 
-/* Creates the DCE, brings the modem to command mode (powering it on if
+/* Registers signal.rssi, creates the DCE, brings the modem to command mode (powering it on if
  * needed), waits for registration and dials PPP. Blocks until the first IP
  * or timeout. Starts a task that redials when PPP drops. */
 esp_err_t cell_start(int timeout_ms);
@@ -17,10 +17,6 @@ bool cell_is_up(void);
 
 /* Signal quality from the last check (99 = unknown). */
 int cell_last_rssi(void);
-
-/* Network code (MCC+MNC, e.g. "24601") of the operator in use; "" before
- * registration. */
-const char *cell_operator(void);
 
 /* Re-reads the signal quality: takes the modem out of PPP for 2-3 s (see
  * cell_with_command_mode). Does nothing while PPP is down. */

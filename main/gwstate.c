@@ -1,5 +1,6 @@
 #include "gwstate.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -7,7 +8,7 @@
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "nvs.h"
-#include "cell.h"
+#include "freertos/FreeRTOS.h"
 #include "mqtt_link.h"
 
 static const char *TAG = "state";
@@ -16,6 +17,22 @@ static const char *TAG = "state";
 
 static uint32_t s_boot;
 static char *s_last_state;   /* last published state, without "time" */
+
+/* Module-owned fields, in publish order. Until the board link and the NTRIP
+ * client exist the facts are "no heartbeat" and "no settings". */
+#define MAX_FIELDS 8
+typedef struct {
+    char name[24];
+    char value[32];
+    bool null;
+} field_t;
+static field_t s_fields[MAX_FIELDS] = {
+    { "autopilot_link", "down", false },
+    { "ntrip", "off", false },
+    { "operator", "", true },
+};
+static int s_nfields = 3;
+static portMUX_TYPE s_fields_mux = portMUX_INITIALIZER_UNLOCKED;
 
 void gw_boot_init(void)
 {
@@ -97,6 +114,24 @@ void gw_nvs_erase(const char *key)
     nvs_close(h);
 }
 
+void gw_state_set(const char *field, const char *value)
+{
+    portENTER_CRITICAL(&s_fields_mux);
+    int i = 0;
+    while (i < s_nfields && strcmp(s_fields[i].name, field) != 0) {
+        i++;
+    }
+    if (i == s_nfields && s_nfields < MAX_FIELDS) {
+        snprintf(s_fields[i].name, sizeof(s_fields[i].name), "%s", field);
+        s_nfields++;
+    }
+    if (i < s_nfields) {
+        snprintf(s_fields[i].value, sizeof(s_fields[i].value), "%s", value ? value : "");
+        s_fields[i].null = !value;
+    }
+    portEXIT_CRITICAL(&s_fields_mux);
+}
+
 void gw_state_publish(bool force)
 {
     const char *version = esp_app_get_description()->version;
@@ -113,15 +148,17 @@ void gw_state_publish(bool force)
         cJSON_AddNullToObject(st, "previous");
     }
     cJSON_AddStringToObject(st, "partition", esp_ota_get_running_partition()->label);
-    /* The autopilot link and the NTRIP client are other issues: until they exist
-     * the facts are "no heartbeat" and "no settings". */
-    cJSON_AddStringToObject(st, "autopilot_link", "down");
-    cJSON_AddStringToObject(st, "ntrip", "off");
-    const char *op = cell_operator();
-    if (op[0]) {
-        cJSON_AddStringToObject(st, "operator", op);
-    } else {
-        cJSON_AddNullToObject(st, "operator");
+    field_t fields[MAX_FIELDS];
+    portENTER_CRITICAL(&s_fields_mux);
+    int n = s_nfields;
+    memcpy(fields, s_fields, sizeof(fields));
+    portEXIT_CRITICAL(&s_fields_mux);
+    for (int i = 0; i < n; i++) {
+        if (fields[i].null) {
+            cJSON_AddNullToObject(st, fields[i].name);
+        } else {
+            cJSON_AddStringToObject(st, fields[i].name, fields[i].value);
+        }
     }
 
     char *body = cJSON_PrintUnformatted(st);
