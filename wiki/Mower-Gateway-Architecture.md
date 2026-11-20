@@ -353,6 +353,10 @@ esp_err_t settings_erase(const char *ns, const char *key);
 
 Kconfig keeps build-time values (APN, broker URI, timeouts, pins of the board link). NVS keeps what changes at runtime or per board (identity, NTRIP settings, OTA state, counters).
 
+**Implemented in [#80](https://github.com/rmx-lt/rmx-mower-gateway/issues/80)** (verified on the board 2026-11-20). `main/settings.h/.c` is now the only code that opens NVS. Besides the calls above it has `settings_get_u32/set_u32` (the boot counter) and `settings_set_many(ns, kv, n)`: several strings in one open and one commit, with `val` NULL to erase. Writing them is not atomic; that is enough for the OTA keys, and #37's pending → active swap will need a pointer key on top. Namespaces and keys are unchanged ("gw": `boot`, `ota_id`/`ota_ver`/`ota_prev`, `prev`/`prev_of`, `legacy`; "creds": `key`, `chain`), so no migration. `gw_nvs_*` and devcert's helpers are thin wrappers over it. The module logs namespace and key on a failed write, never a value. `metrics` still reads `nvs_get_stats()` directly (read-only, no handle).
+
+Board check: USB-flashed development as 0.4.1-dev (boot 69), then OTA to 0.4.2-pr80. The OTA keys written by the old code were read by the new code: the done ack had previous 0.4.1-dev, the boot counter went to 70, and the key and chain loaded (cert login). An OTA to 0.4.3-pr80 then had its keys written and read by the new code: done ack, boot 71. A restart kept `previous` 0.4.2-pr80 (boot 72).
+
 ## 6. Directory layout and host tests (Proposal)
 
 ```

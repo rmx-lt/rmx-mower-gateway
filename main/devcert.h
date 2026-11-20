@@ -21,7 +21,7 @@
 #define DEVCERT_CSR_END   "=====RMX-CSR-END====="
 
 /* Loads the key (generating and storing it on first boot) and the chain. Call after
- * nvs_flash_init, first thing in app_main. A broken chain is ignored (the board then has no identity). */
+ * settings_init, first thing in app_main. A broken chain is ignored (the board then has no identity). */
 esp_err_t devcert_init(void);
 
 /* Subject CN of the stored certificate, NULL when there is none (or it does not match the key). */

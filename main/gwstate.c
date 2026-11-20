@@ -7,9 +7,9 @@
 #include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
-#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "mqtt_link.h"
+#include "settings.h"
 
 static const char *TAG = "state";
 
@@ -36,17 +36,10 @@ static portMUX_TYPE s_fields_mux = portMUX_INITIALIZER_UNLOCKED;
 
 void gw_boot_init(void)
 {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
-        ESP_LOGE(TAG, "cannot open NVS namespace %s, boot counter stays 0", NVS_NS);
-        return;
-    }
     uint32_t boot = 0;
-    nvs_get_u32(h, "boot", &boot);
+    settings_get_u32(NVS_NS, "boot", &boot);   /* NOT_FOUND on the first boot: 0 */
     s_boot = boot + 1;
-    nvs_set_u32(h, "boot", s_boot);
-    nvs_commit(h);
-    nvs_close(h);
+    settings_set_u32(NVS_NS, "boot", s_boot);
     ESP_LOGI(TAG, "boot %lu", (unsigned long)s_boot);
 }
 
@@ -82,36 +75,22 @@ void gw_add_time(cJSON *obj, bool fraction)
 
 bool gw_nvs_get(const char *key, char *buf, size_t len)
 {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) {
-        return false;
-    }
-    size_t n = len;
-    bool ok = nvs_get_str(h, key, buf, &n) == ESP_OK;
-    nvs_close(h);
-    return ok;
+    return settings_get_str(NVS_NS, key, buf, len) == ESP_OK;
 }
 
 bool gw_nvs_set(const char *key, const char *val)
 {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
-        return false;
-    }
-    bool ok = nvs_set_str(h, key, val) == ESP_OK && nvs_commit(h) == ESP_OK;
-    nvs_close(h);
-    return ok;
+    return settings_set_str(NVS_NS, key, val) == ESP_OK;
 }
 
 void gw_nvs_erase(const char *key)
 {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
-        return;
-    }
-    nvs_erase_key(h, key);
-    nvs_commit(h);
-    nvs_close(h);
+    settings_erase(NVS_NS, key);
+}
+
+bool gw_nvs_set_many(const settings_kv_t *kv, int n)
+{
+    return settings_set_many(NVS_NS, kv, n) == ESP_OK;
 }
 
 void gw_state_set(const char *field, const char *value)

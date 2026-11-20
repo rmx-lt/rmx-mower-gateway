@@ -13,10 +13,10 @@
 #include "mbedtls/x509.h"
 #include "mbedtls/x509_crt.h"
 #include "mbedtls/x509_csr.h"
-#include "nvs.h"
 #include "psa/crypto.h"
 
 #include "creds.h"
+#include "settings.h"
 #include "gw_tasks.h"
 
 static const char *TAG = "devcert";
@@ -51,32 +51,12 @@ static bool valid_cn(const char *s)
 
 static esp_err_t nvs_read(const char *key, char *buf, size_t len)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READONLY, &h);
-    if (err == ESP_OK) {
-        size_t n = len;
-        err = nvs_get_str(h, key, buf, &n);
-        nvs_close(h);
-    }
-    return err;
+    return settings_get_str(NVS_NS, key, buf, len);
 }
 
 static esp_err_t nvs_write(const char *key, const char *val)   /* val NULL = erase */
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = val ? nvs_set_str(h, key, val) : nvs_erase_key(h, key);
-    if (err == ESP_ERR_NVS_NOT_FOUND && !val) {
-        err = ESP_OK;
-    }
-    if (err == ESP_OK) {
-        err = nvs_commit(h);
-    }
-    nvs_close(h);
-    return err;
+    return val ? settings_set_str(NVS_NS, key, val) : settings_erase(NVS_NS, key);
 }
 
 static esp_err_t generate_key(void)
