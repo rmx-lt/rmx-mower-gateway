@@ -288,6 +288,8 @@ ntrip_state_t ntrip_state(void);
 
 Pure parts in `rmx_codec`: `cobs_encode/decode`, `crc16_ccitt_false`, `bl_frame_pack/parse`, `bl_reliable_*` (sequence, ack, resend decisions from `now_ms`), `bl_queue_*` (the 60 s / 64 KB ring, drop-oldest), `ntrip_build_request`, `ntrip_parse_response`, `nmea_gga_has_position`.
 
+The NTRIP parts are implemented and host-tested in [#96](https://github.com/rmx-lt/rmx-mower-gateway/issues/96) (`ntrip_codec.h`). Choice: an NTRIP rev 1 request (`HTTP/1.0`, no `Ntrip-Version`), so the stream is never chunked; a rev 2 chunked answer counts as an error. Settings with control characters (or spaces in host and mount point, `:` in the user) are refused, so a stored setting cannot inject a header.
+
 ### 5.6 `settings.h`
 
 ```c
