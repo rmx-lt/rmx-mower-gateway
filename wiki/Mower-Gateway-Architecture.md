@@ -15,16 +15,18 @@ Related: [Mower-Gateway](Mower-Gateway) (what the firmware does), [Mower-Protoco
 
 | Module | Lines | Owns |
 |---|---|---|
-| `app_main` | 108 | boot sequence, provisioning wait, SNTP, 60 s alive loop |
+| `app_main` | ~125 | boot sequence, provisioning wait, SNTP; returns after start-up |
+| `gw_link` | ~140 | link-state bits (cell, MQTT, server online, server link, server lost, clock) and `GW_EVENT` edges ([#75](https://github.com/rmx-lt/rmx-mower-gateway/issues/75)) |
+| `supervisor` | ~75 | on link events: image confirm, `gateway/state`, final OTA ack, 60 s alive log ([#75](https://github.com/rmx-lt/rmx-mower-gateway/issues/75)) |
 | `board` | 61 | pins, PWRKEY pulse, STATUS, LED |
 | `cell` | 346 | esp_modem DCE, registration, PPP dial, redial task, AT sessions inside PPP (`cell_with_command_mode`) |
 | `usage` | 199 | byte counters: PPP netif (output hook + `--wrap=ip4_input`), MQTT per topic |
 | `devcert` + `creds` | 366 | P-256 key and chain in NVS `creds`, CSR, UART0 provisioning console, device name = CN |
-| `mqtt_link` | 380 | esp-mqtt client, fixed topic list, reassembly, server-online flag, 10 s server-lost timer |
+| `mqtt_link` | ~355 | esp-mqtt client, fixed topic list, reassembly; sets `GW_MQTT_UP` / `GW_SERVER_ONLINE` |
 | `remote_cmd` | 355 | `gateway/cmd` queue and task, id memory (16 ids, 3 min), acks, dispatch |
 | `ota` | 725 | chunk download task, image checks, rollback timer, final ack after restart |
 | `gwstate` | 175 | boot counter, clock, NVS `gw` helpers, `gateway/state` |
-| `metrics` | 765 | catalogue, telemetry, monitor sessions, CPU load, **and** the 100 ms tick task that drives state, OTA confirm and result |
+| `metrics` | ~750 | catalogue, telemetry, monitor sessions, CPU load; its 100 ms tick republishes the catalogue on the server-link edge |
 
 ### 1.1 Dependency graph
 
@@ -32,7 +34,9 @@ Arrows are `#include` of another module's header (from the code).
 
 ```mermaid
 graph TD
-  app_main --> board & cell & devcert & creds & gwstate & metrics & mqtt_link & ota & remote_cmd
+  app_main --> board & cell & devcert & creds & gwstate & metrics & mqtt_link & ota & remote_cmd & gw_link & supervisor
+  supervisor --> gw_link & cell & gwstate & mqtt_link & ota
+  cell & mqtt_link & metrics --> gw_link
   cell --> board & usage
   creds --> devcert
   devcert --> creds
@@ -49,7 +53,8 @@ Cycles: `mqtt_link ⇄ gwstate` (transport uses the NVS helpers, state publishes
 
 | Task | Created in | Priority | Stack | Blocks on |
 |---|---|---|---|---|
-| `main` | IDF | 1 (IDF default) | 8192 (`sdkconfig.defaults`) | 60 s delay loop |
+| `main` | IDF | 1 (IDF default) | 8192 (`sdkconfig.defaults`) | start-up only, then returns |
+| `supervisor` | `supervisor_start` | 3 | 6144 | task notification from a `GW_EVENT`, or 1 s |
 | `cell_wd` | `cell_start` | 5 | 4096 | event group `LOST_IP`, then dial (AT sync, registration and IP waits: minutes inside esp_modem calls) |
 | esp-mqtt | `mqtt_link_start` | IDF default | 8192 | socket; runs all MQTT callbacks |
 | `remote_cmd` | `remote_cmd_init` | 4 | 6144 | queue of 4 heap-copied commands |
@@ -68,7 +73,7 @@ Stack high-water marks have not been measured.
 - **Event groups**: `cell` (`GOT_IP`, `LOST_IP`), `mqtt_link` (`CONNECTED`, fw SUBACKs).
 - **Mutexes**: `cell` modem lock (redial vs AT session), `remote_cmd` id memory, `metrics` monitor list. `usage` uses a spinlock (called from lwIP).
 - **Shared variables without a lock**: `volatile bool` flags in `mqtt_link` and `ota` (fine, single writer); `cell`'s `s_rssi` (`int`, briefly 99 while registering) and `s_operator` (a string the redial rewrites while `gwstate` may read it).
-- **Polling**: `gw_tick` calls `mqtt_link_update()` every 100 ms to time the server link, publishes state on change once a second, and calls `ota_confirm()` / `ota_report_result()`. `app_main` calls the same two OTA functions every 60 s: two tasks can send the final OTA ack.
+- **Link state** ([#75](https://github.com/rmx-lt/rmx-mower-gateway/issues/75)): `gw_link` holds the bits of §4.1 in one event group, derives the server link and the 10 s server-lost rule (an `esp_timer`), and posts a `GW_EVENT` per change. Only the supervisor confirms the image and sends the final OTA ack.
 
 ### 1.4 Errors and recovery
 

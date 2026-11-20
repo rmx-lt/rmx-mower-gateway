@@ -11,6 +11,7 @@
 #include "esp_timer.h"
 #include "nvs.h"
 #include "cell.h"
+#include "gw_link.h"
 #include "gwstate.h"
 #include "mqtt_link.h"
 #include "ota.h"
@@ -28,7 +29,6 @@ static const char *TAG = "metrics";
 #define MON_FLUSH_US       200000
 #define MON_HOLD_DEFAULT   10
 #define MON_HOLD_MAX       60
-#define STATE_CHECK_US     1000000
 
 /* ---------------------------------------------------------------- catalogue */
 
@@ -642,7 +642,7 @@ static void stream_flush(stream_t *s, int64_t now)
 static void monitor_tick(int64_t now)
 {
     xSemaphoreTake(s_mon_lock, portMAX_DELAY);
-    bool lost = mqtt_link_server_lost();
+    bool lost = gw_link_get() & GW_SERVER_LOST;
     for (stream_t **link = &s_streams; *link;) {
         stream_t *s = *link;
         if (lost || now > s->deadline_us) {
@@ -686,37 +686,23 @@ static void monitor_tick(int64_t now)
 
 /* ------------------------------------------------------------------- tasks */
 
-/* §4.2: when the server link comes up, the gateway publishes its state and
- * its catalogue again (and the final ack of an update that restarted it). */
+/* §4.2: when the server link comes up, the gateway publishes its catalogue
+ * again (the supervisor publishes the state on the same edge). */
 static void tick_task(void *arg)
 {
     bool was_up = false;
-    bool ota_reported = false;
-    int64_t state_check_us = 0;
     TickType_t last = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(TICK_MS));
-        mqtt_link_update();
         int64_t now = esp_timer_get_time();
-        bool up = mqtt_link_server_up();
+        bool up = gw_link_get() & GW_SERVER_LINK_UP;
         if (up && !was_up) {
-            ESP_LOGI(TAG, "server link up: publishing state and catalogue");
-            ota_confirm();
-            gw_state_publish(true);
+            ESP_LOGI(TAG, "server link up: publishing the catalogue");
             catalogue_publish();
             telemetry_reset();
-            ota_reported = false;
-            state_check_us = now;
         }
         was_up = up;
         if (up) {
-            if (now - state_check_us >= STATE_CHECK_US) {
-                state_check_us = now;
-                gw_state_publish(false);   /* only when a field changed */
-                if (!ota_reported) {
-                    ota_reported = ota_report_result();   /* the final ack of an update that restarted us */
-                }
-            }
             telemetry_poll(now);
         }
         monitor_tick(now);
