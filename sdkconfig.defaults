@@ -48,3 +48,6 @@ CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 # TLS checks certificate "valid from"/"valid to" (off by default in ESP-IDF).
 # Needs a set clock: app_main starts MQTT only after SNTP (issue 18).
 CONFIG_MBEDTLS_HAVE_TIME_DATE=y
+# A crash leaves an ELF core dump in the coredump partition (#110); read it with
+# esp-coredump (wiki Mower-Gateway-Tools). app_main logs at boot when one is there.
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y

@@ -1,8 +1,10 @@
-# 16 MB flash (ESP32-WROVER-E N16R8): two 4 MB OTA slots, NVS for secrets/state, spare storage.
+# 16 MB flash (ESP32-WROVER-E N16R8): two 4 MB OTA slots, NVS for secrets/state, the core dump
+# of the last crash (#110, carved from the start of storage: nothing else moved), spare storage.
 # Name,     Type, SubType,  Offset,    Size
 nvs,        data, nvs,      0x9000,    0x6000
 otadata,    data, ota,      0xF000,    0x2000
 phy_init,   data, phy,      0x11000,   0x1000
 ota_0,      app,  ota_0,    0x20000,   0x400000
 ota_1,      app,  ota_1,    0x420000,  0x400000
-storage,    data, spiffs,   0x820000,  0x7E0000
+coredump,   data, coredump, 0x820000,  0x20000
+storage,    data, spiffs,   0x840000,  0x7C0000
