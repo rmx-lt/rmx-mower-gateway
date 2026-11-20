@@ -160,7 +160,7 @@ the running one), size, whole-image SHA-256 against the chunk header, then `esp_
     the radio came back. **The `download_failed` ack was lost**: it was published while offline and esp-mqtt drops
     outbox messages after 30 s (`OUTBOX_EXPIRED_TIMEOUT_MS`), so it never reached `gateway/cmd/ack`
     ([#88](https://github.com/rmx-lt/rmx-mower-gateway/issues/88)). A resend of the same command id gets it from the
-    repeat memory.
+    repeat memory. **Fixed in #88** (2026-11-20): the outbox keeps messages for 30 min, see Mower-Gateway-Server-Contract.
   - **Power cut while writing**: not verified; it needs someone to pull the power during a download
     ([#90](https://github.com/rmx-lt/rmx-mower-gateway/issues/90)).
 
