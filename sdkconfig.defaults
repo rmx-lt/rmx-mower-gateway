@@ -51,3 +51,9 @@ CONFIG_MBEDTLS_HAVE_TIME_DATE=y
 # A crash leaves an ELF core dump in the coredump partition (#110); read it with
 # esp-coredump (wiki Mower-Gateway-Tools). app_main logs at boot when one is there.
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+# A QoS 1 publish made while the link is down (a final command ack) stays in
+# esp-mqtt's outbox and goes out after the reconnect, for up to 30 min (the
+# supervisor restarts after 30 min without the server link). Default 30 s lost
+# acks (#88). The other custom MQTT options keep their built-in defaults.
+CONFIG_MQTT_USE_CUSTOM_CONFIG=y
+CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=1800000

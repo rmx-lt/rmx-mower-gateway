@@ -359,7 +359,10 @@ esp_err_t mqtt_link_start(void)
         .credentials.authentication.certificate = chain,   /* PEM, NUL-terminated */
         .credentials.authentication.key = key,
         .session.keepalive = 15,                  /* wiki Mower-Protocol §3 */
-        .session.disable_clean_session = false,   /* clean session: nothing is queued while offline */
+        /* Clean session: the broker queues nothing for us. Our own QoS 1 publishes (acks)
+         * wait in esp-mqtt's outbox across a reconnect for up to
+         * CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS (sdkconfig.defaults, #88). */
+        .session.disable_clean_session = false,
         .session.message_retransmit_timeout = 10000,   /* LTE round trips + TLS */
         .session.last_will = {
             .topic = s_status_topic,
@@ -367,6 +370,7 @@ esp_err_t mqtt_link_start(void)
             .qos = 1,
             .retain = 1,
         },
+        .outbox.limit = 32768,   /* a long outage cannot fill the RAM; a full outbox fails the publish */
         .network.reconnect_timeout_ms = 10000,
         .network.timeout_ms = 20000,
         /* 8192 holds a 4096-byte firmware chunk, its 64-byte header and the

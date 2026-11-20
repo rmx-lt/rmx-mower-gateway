@@ -117,6 +117,12 @@ retained `status` and `firmware` messages that the old one left on the broker (f
   `gateway/fw/res` and `mower/status/server` on every connect (the shared one is covered by
   `pattern read mower/status/server`, the others by `pattern readwrite mower/%u/#`).
 - Connection: **clean session**, **keep-alive 15 s** (verified on the board, see [Mower-Gateway](Mower-Gateway)).
+- **Acks produced offline still arrive** ([#88](https://github.com/rmx-lt/rmx-mower-gateway/issues/88), verified on the board 2026-11-20). The gateway's QoS 1 publishes wait in esp-mqtt's outbox
+  across a reconnect for up to 30 min (`CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=1800000`; the supervisor restarts after 30 min without the server link, and RAM is
+  lost on a restart). The outbox is capped at 32 KB (`outbox.limit`). The server can therefore get a final ack minutes late, after the gateway's `status` goes `online` again.
+  Test: the radio was switched off (FLIGHT low) for 90 s, the `ping` ack was produced 4 s after MQTT dropped, and it arrived right after the reconnect 112 s later.
+  The old 30 s expiry dropped such an ack (2026-11-19). An ack lost to a restart is still in the repeat memory only until that restart, so the server should keep resending
+  an open command id (same id) until it gets a final ack or the command expires.
 - **Server link** (Mower-Protocol §4.2): MQTT is up **and** the retained `mower/status/server` is `online`. When it
   comes up (also after boot) the gateway publishes `gateway/state` and the catalogue again; monitor streams end when
   it has been down 10 s (`main/mqtt_link.c`, `main/metrics.c`).
