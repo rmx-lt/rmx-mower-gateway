@@ -71,7 +71,7 @@ static void handle_message(const char *topic, const char *data, size_t len)
     if (s_cmd_cb && strcmp(topic, s_cmd_topic) == 0) {
         s_cmd_cb(data, len);
     } else {
-        ESP_LOGI(TAG, "%s: %.*s", topic, len > 200 ? 200 : (int)len, data);
+        ESP_LOGI(TAG, "%s: %u bytes, no handler", topic, (unsigned)len);   /* never the payload */
     }
 }
 
