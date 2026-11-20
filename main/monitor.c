@@ -11,6 +11,7 @@
 #include "gwstate.h"
 #include "metrics.h"
 #include "mqtt_link.h"
+#include "remote_cmd.h"
 
 static const char *TAG = "monitor";
 
@@ -276,8 +277,27 @@ void monitor_tick(int64_t now)
     xSemaphoreGive(s_mon_lock);
 }
 
+static void cmd_monitor_start(const char *id, const cJSON *cmd, cmd_reply_t *r)
+{
+    r->result = cJSON_CreateObject();
+    if (monitor_start(cmd, r->result, &r->error, &r->message)) {
+        r->error = NULL;   /* monitor_start presets an error code */
+    }
+}
+
+static void cmd_monitor_stop(const char *id, const cJSON *cmd, cmd_reply_t *r)
+{
+    r->result = cJSON_CreateObject();
+    monitor_stop(cmd, r->result);
+}
+
 esp_err_t monitor_init(void)
 {
     s_mon_lock = xSemaphoreCreateMutex();
-    return s_mon_lock ? ESP_OK : ESP_ERR_NO_MEM;
+    if (!s_mon_lock) {
+        return ESP_ERR_NO_MEM;
+    }
+    cmd_register("monitor_start", cmd_monitor_start, CMD_DURING_OTA);
+    cmd_register("monitor_stop", cmd_monitor_stop, CMD_DURING_OTA);
+    return ESP_OK;
 }
