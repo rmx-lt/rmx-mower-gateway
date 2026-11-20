@@ -76,7 +76,9 @@ int ntrip_build_request(char *out, size_t cap, const char *host, int port, const
         }
         put(&k, "Authorization: Basic ");
         put_base64(&k, (const uint8_t *)cred, (size_t)n);
-        memset(cred, 0, sizeof(cred));
+        for (volatile char *v = cred; v < cred + sizeof(cred); v++) {
+            *v = 0;   /* volatile: a memset of a dead buffer may be optimised away */
+        }
         put(&k, "\r\n");
     }
     put(&k, "\r\n");
