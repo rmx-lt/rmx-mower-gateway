@@ -634,7 +634,17 @@ void ota_confirm(void)
     }
     if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
         s_pending_verify = false;
-        ESP_LOGI(TAG, "image %s confirmed", esp_app_get_description()->version);
+        const char *version = esp_app_get_description()->version;
+        ESP_LOGI(TAG, "image %s confirmed", version);
+        /* store the previous version now, so the first gateway/state already names it (#108) */
+        char target[VERSION_LEN], previous[VERSION_LEN];
+        if (gw_nvs_get(NVS_OTA_VER, target, sizeof(target)) && strcmp(target, version) == 0) {
+            if (!gw_nvs_get(NVS_OTA_PREV, previous, sizeof(previous))) {
+                snprintf(previous, sizeof(previous), "unknown");
+            }
+            const settings_kv_t prev[] = { { "prev", previous }, { "prev_of", version } };
+            gw_nvs_set_many(prev, 2);
+        }
     }
 }
 
@@ -653,14 +663,12 @@ bool ota_report_result(void)
     }
     const char *version = esp_app_get_description()->version;
     if (strcmp(version, target) == 0) {
-        /* the new image runs, confirmed and connected */
-        const settings_kv_t prev[] = { { "prev", previous }, { "prev_of", version } };
-        gw_nvs_set_many(prev, 2);
+        /* the new image runs, confirmed and connected; ota_confirm() stored prev */
         cJSON *res = cJSON_CreateObject();
         cJSON_AddStringToObject(res, "version", version);
         cJSON_AddStringToObject(res, "previous", previous);
         cJSON_AddStringToObject(res, "partition", esp_ota_get_running_partition()->label);
-        gw_state_publish(true);   /* before the ack: the state already names the new version */
+        gw_state_publish(false);   /* before the ack (normally already out on the server-link edge) */
         cmd_ack(id, "ota", "done", NULL, NULL, res);
     } else {
         char text[96];
