@@ -1,34 +1,43 @@
 # Requirements
 
-What the gateway firmware must do, collected for the architecture pilot ([#120](https://github.com/rmx-lt/rmx-mower-gateway/issues/120)).
-Every architecture decision in `arch/decisions/` cites the requirements it serves; the checker
-(`check_records.py` from jRmx0/esp-architecture) fails a requirement that no decision serves.
+What the rmx-mower-gateway firmware must do. The gateway is the mower's communications board (LilyGo T-SIM7600:
+ESP32 + SIM7600G-H): it links the autopilot board to rmx-server over LTE, relays RTK corrections from an NTRIP
+caster, and updates its own firmware over the air. Architecture decisions cite these requirements by ID.
 
-A requirement says **what** and **why**, never which module does it. Each names its source: a wiki page and
-section (Mower-Protocol is the contract with the server and the autopilot), the repo's `CLAUDE.md`, or the
-code where nothing else writes it down.
+A requirement says **what** is needed and **why**, not how it is built: values the firmware tunes (timeouts, key
+types) belong to the decisions. Each requirement names its source: a page of the Blade of Grass wiki
+(https://github.com/rmx-lt/blade-of-grass/wiki, where Mower-Protocol is the contract with the server and the
+autopilot), a file in this repository, or the owner.
 
-Areas are grouped below; each area has its own ID range in tens, so a gap is room for a new requirement and IDs never change when areas move.
+Requirements are sorted into areas, and areas into groups. Each area has its own ID range in tens; a gap is room
+for a new requirement, and IDs never change.
 
-## Overview
+## Groups
 
-| Group | Area | IDs | Requirements |
+| Group | Description |
+|---|---|
+| Links | How the gateway connects to the outside world. |
+| Services | What the gateway does over those links. |
+| Qualities | How well it must do it. |
+| Constraints | What it must fit and how it is checked. |
+
+## Areas
+
+| Area | Group | IDs | Description |
 |---|---|---|---|
-| Links | [Cellular link and time](#cellular-link-and-time) | REQ-001–009 | 6 |
-| Links | [Server protocol](#server-protocol) | REQ-010–019 | 5 |
-| Links | [Board link to the autopilot](#board-link-to-the-autopilot) | REQ-050–059 | 7 |
-| Links | [Local link to a phone](#local-link-to-a-phone) | REQ-100–109 | 1 |
-| Services | [Commands](#commands) | REQ-020–029 | 4 |
-| Services | [Firmware update](#firmware-update) | REQ-030–039 | 3 |
-| Services | [NTRIP corrections](#ntrip-corrections) | REQ-040–049 | 4 |
-| Services | [Metrics, telemetry, monitor](#metrics-telemetry-monitor) | REQ-060–069 | 4 |
-| Qualities | [Identity and security](#identity-and-security) | REQ-070–079 | 4 |
-| Qualities | [Robustness](#robustness) | REQ-080–089 | 4 |
-| Constraints | [Hardware, resources, testing](#hardware-resources-testing) | REQ-090–099 | 5 |
+| [Cellular link and time](#cellular-link-and-time) | Links | REQ-001–009 | The LTE data connection through the modem, and the clock set from the network. |
+| [Server protocol](#server-protocol) | Links | REQ-010–019 | The gateway's side of the MQTT contract with the server: topics, server link, state. |
+| [Board link to the autopilot](#board-link-to-the-autopilot) | Links | REQ-050–059 | The UART link that relays the autopilot's messages and carries corrections and heartbeats. |
+| [Local link to a phone](#local-link-to-a-phone) | Links | REQ-100–109 | A phone near the mower talking to the gateway directly over Wi-Fi. |
+| [Commands](#commands) | Services | REQ-020–029 | Commands from the server and their acknowledgements. |
+| [Firmware update](#firmware-update) | Services | REQ-030–039 | Downloading, checking and installing a new firmware image. |
+| [NTRIP corrections](#ntrip-corrections) | Services | REQ-040–049 | The caster session that feeds RTK corrections to the autopilot. |
+| [Metrics, telemetry, monitor](#metrics-telemetry-monitor) | Services | REQ-060–069 | What the gateway measures and how it reports it. |
+| [Identity and security](#identity-and-security) | Qualities | REQ-070–079 | The board's certificate identity, its provisioning, and keeping secrets secret. |
+| [Robustness](#robustness) | Qualities | REQ-080–089 | Recovering from faults without a person on site. |
+| [Hardware, resources, testing](#hardware-resources-testing) | Constraints | REQ-090–099 | The board, the modem's bandwidth, flash, the user LED, and tests off the board. |
 
 ## Links
-
-How the gateway connects to the outside world.
 
 ### Cellular link and time
 
@@ -55,7 +64,7 @@ How the gateway connects to the outside world.
 
 | ID | Title | Requirement | Source |
 |---|---|---|---|
-| REQ-050 | Frame the board link | UART at 921600 baud, 8N1, RTS/CTS. Frames are type, body and CRC-16 (CCITT-FALSE), COBS-encoded, ending in `0x00`, at most 4608 bytes before encoding. Bad or unknown frames are dropped and counted (`link.crc_errors`). | Mower-Protocol §14, §14.1. Planned: [#62](https://github.com/rmx-lt/rmx-mower-gateway/issues/62). |
+| REQ-050 | Frame the board link | UART at 921600 baud, 8N1, RTS/CTS. Frames are type, body and CRC-16 (CCITT-FALSE), COBS-encoded, ending in `0x00`, at most 4608 bytes before encoding. Bad or unknown frames are dropped and counted (`link.crc_errors`). | Mower-Protocol §14, §14.1. Planned: the link is not built yet. |
 | REQ-051 | Relay the autopilot's MQTT traffic without reading it | The gateway publishes and subscribes `mower/<name>/autopilot/…` on the autopilot's behalf, adding the prefix on publish and removing it on delivery, so the autopilot can use only its own topics. It never reads or changes autopilot payloads. | Mower-Protocol §1 (gateway role), §3, §14.2. |
 | REQ-052 | Deliver reliable frames on the board link | QoS 1 messages and SUBSCRIBE are numbered 1–255, one in flight per direction, acknowledged, resent after 200 ms up to 5 times, then dropped and counted (`link.dropped`). A repeat is acknowledged again and not passed on. | Mower-Protocol §14.2. |
 | REQ-053 | Keep the autopilot's subscriptions | A SUBSCRIBE replaces the previous list; the gateway subscribes the list again after every MQTT reconnect and asks for it (heartbeat bit 4) from its start until it has one. | Mower-Protocol §14.2, §14.4. |
@@ -67,11 +76,9 @@ How the gateway connects to the outside world.
 
 | ID | Title | Requirement | Source |
 |---|---|---|---|
-| REQ-100 | Let a phone drive the mower over local Wi-Fi | A phone near the mower connects to the gateway over Wi-Fi and sends the same autopilot commands and live-driving setpoints as the server. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1). | Mower-Protocol §1 (gateway role: "later a local link"), §9 (last paragraph); owner (2026-11-22, PR #122). |
+| REQ-100 | Let a phone drive the mower over local Wi-Fi | A phone near the mower connects to the gateway over Wi-Fi and sends the same autopilot commands and live-driving setpoints as the server. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1). | Mower-Protocol §1 (gateway role: "later a local link"), §9 (last paragraph); owner (2026-11-22). |
 
 ## Services
-
-What the gateway does over those links.
 
 ### Commands
 
@@ -110,8 +117,6 @@ What the gateway does over those links.
 
 ## Qualities
 
-How well it must do it.
-
 ### Identity and security
 
 | ID | Title | Requirement | Source |
@@ -127,12 +132,10 @@ How well it must do it.
 |---|---|---|---|
 | REQ-080 | Recover from a stuck task | A firmware task that stops making progress is detected and the board restarts, with the reason logged. A task that legitimately waits a long time (a redial) is not mistaken for a stuck one. | Mower-Gateway-Architecture §4.3. |
 | REQ-081 | Never interrupt an image write | No automatic restart or recovery step runs while a firmware image is being written. | Mower-Gateway-Architecture §4.3 (ladder step 3). |
-| REQ-082 | Keep a crash for later | The core dump of the last crash stays in flash until the next crash, readable over USB. | `partitions.csv`; `main/app_main.c` ([#110](https://github.com/rmx-lt/rmx-mower-gateway/issues/110)). |
+| REQ-082 | Keep a crash for later | The core dump of the last crash stays in flash until the next crash, readable over USB. | `partitions.csv`; `main/app_main.c`. |
 | REQ-083 | Keep settings and identity across updates | USB flashing and OTA updates leave the key, certificate, caster settings and boot counter untouched. | README; Mower-Gateway (Identity). |
 
 ## Constraints
-
-What it must fit and how it is checked.
 
 ### Hardware, resources, testing
 
@@ -141,5 +144,5 @@ What it must fit and how it is checked.
 | REQ-090 | Run on the T-SIM7600 board | ESP32-WROVER-E (16 MB flash, 8 MB PSRAM) with the SIM7600G-H on UART1 (TX 27, RX 26, no flow control), the board link on UART2 (TX 23, RX 19, RTS/CTS), the provisioning console on UART0 (CH9102). GPIO12 (user LED) is a strapping pin and must stay low at reset. | Mower-Gateway-Board-Hardware; Mower-Hardware (wiring); `CLAUDE.md` (pitfalls). |
 | REQ-091 | Fit the modem's bandwidth | Everything shares the modem's serial link, about 11 KB/s. Corrections take about 1.1 KB/s, monitor streams are capped by their budget, and downloads run one at a time. | Mower-Protocol §12.4, §15; Mower-Gateway (NTRIP client, measured); Mower-Hardware. |
 | REQ-092 | Fit two image slots | The image fits a 4 MB app slot, with a second slot for the update. | `partitions.csv`. |
-| REQ-093 | Show the data link on the user LED | The blue user LED is on while the cellular data connection (PPP) is up. | as built (`main/cell.c`); kept by the owner (2026-11-22, PR #122). |
+| REQ-093 | Show the data link on the user LED | The blue user LED is on while the cellular data connection (PPP) is up. | As built (`main/cell.c`); confirmed by the owner (2026-11-22). |
 | REQ-094 | Test the pure logic on a PC | Protocol logic that needs no hardware (framing, CRC, reliable-frame state, queues, chunk headers, command id memory, NTRIP parsing, recovery decisions) runs in host tests in CI. | Mower-Gateway-Architecture §2 (finding 5), §1.5 (tests). |
