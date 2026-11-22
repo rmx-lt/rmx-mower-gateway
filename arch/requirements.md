@@ -8,6 +8,11 @@ caster, and updates its own firmware over the air. Architecture decisions cite t
 a requirement never points back at them. A new feature starts here: its requirement is written first and the
 feature's issue, code and documentation cite it.
 
+**It changes with the project.** Requirements may be reworded, merged, split, moved, renumbered or removed as
+development teaches more. Before adding one, review the existing requirements: when one already covers the need,
+update it instead of adding a near-duplicate. When an ID changes or disappears, update everything that cites it in
+the same change.
+
 A requirement says **what** is needed and **why**, not how it is built: values the firmware tunes (timeouts, key
 types) belong to the decisions. The one outside document requirements rely on is Mower-Protocol
 (https://github.com/rmx-lt/blade-of-grass/wiki/Mower-Protocol), the interface contract the gateway shares with the
@@ -16,7 +21,7 @@ server and the autopilot; a requirement names it the way it would name a standar
 Requirements are **functional** (what the gateway does) or **non-functional** (how well it does it, and the limits
 it fits in). Each kind is split into groups, and each group into areas. The ID says the kind:
 `F-REQ-nnn` is functional, `NF-REQ-nnn` non-functional. Each area has its own range in tens, so a gap is room for a
-new requirement. Once decisions cite an ID, it never changes.
+new requirement.
 
 ## Kinds and groups
 
