@@ -1,4 +1,4 @@
-<!-- esp-architecture:diagrams begin: generated from .esp-architecture/architecture.yaml by generate_diagrams.py, do not edit -->
+<!-- esp-architecture:diagrams begin: generated from .esp-architecture/manifest/architecture.yaml by generate_diagrams.py, do not edit -->
 
 ## Context
 

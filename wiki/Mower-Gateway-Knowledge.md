@@ -4,7 +4,7 @@ Start here. Facts marked "verified" were measured on the real board on 2026-10-1
 
 Reusable board and chip facts (T-SIM7600 header pinout, free GPIOs, the ESP32-P4 board) live in the private ESP knowledge hub `jRmx0/esp-knowledge` (local `C:\Repos\esp-knowledge`, read its `INDEX.md`). Put new board or chip facts there; probe-specific knowledge stays on these `Mower-Gateway-*` pages.
 
-**What the firmware must do** is in [`.esp-architecture/requirements.md`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/.esp-architecture/requirements.md) (`F-REQ-nnn` functional, `NF-REQ-nnn` non-functional). It is the source of truth: these pages describe how the requirements are met and cite their IDs; a new feature starts with its requirement there.
+**What the firmware must do** is in [`.esp-architecture/requirements/requirements.md`](https://github.com/rmx-lt/rmx-mower-gateway/blob/development/.esp-architecture/requirements/requirements.md) (`F-REQ-nnn` functional, `NF-REQ-nnn` non-functional). It is the source of truth: these pages describe how the requirements are met and cite their IDs; a new feature starts with its requirement there.
 
 | # | Page | Read it when you need… |
 |---|---|---|
