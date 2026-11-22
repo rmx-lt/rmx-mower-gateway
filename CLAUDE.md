@@ -17,6 +17,10 @@ wrong (mark what you verified on hardware and when), per
 Work and open questions are GitHub issues in this repo, on the Blade of Grass project
 (https://github.com/orgs/rmx-lt/projects/1), not notes in markdown files.
 
+**Requirements come first.** `arch/requirements.md` is the source of truth for what the firmware must do. A new
+feature or behaviour change starts with its requirement there (`F-REQ-nnn` or `NF-REQ-nnn`); its issue, code and
+wiki pages cite the ID. Never make a requirement point at code or a wiki page.
+
 Reusable board, chip and ESP-IDF knowledge also lives in the central hub `C:\Repos\esp-knowledge`
 (private repo `jRmx0/esp-knowledge`; read its `INDEX.md`). Its `boards/t-sim7600.md` has the header pinout and
 free GPIOs; put new board or chip facts there, and keep gateway-specific knowledge in the wiki (`Mower-Gateway-*` pages).
