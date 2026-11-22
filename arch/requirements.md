@@ -20,6 +20,7 @@ code where nothing else writes it down. Numbers are grouped by area:
 | 070–079 | Identity and security |
 | 080–089 | Robustness |
 | 090–099 | Hardware, resources, testing |
+| 100–109 | Local link to a phone |
 
 ## REQ-001 Reach the server over LTE, MQTT over TLS only
 The gateway reaches rmx-server through the SIM7600G-H modem's data connection (PPP) and talks to it only with
@@ -254,9 +255,14 @@ Source: `partitions.csv`.
 
 ## REQ-093 Show the data link on the user LED
 The blue user LED is on while the cellular data connection (PPP) is up.
-Source: as built only (`main/cell.c`); not written down elsewhere. To confirm.
+Source: as built (`main/cell.c`); kept by the owner (2026-11-22, PR #122).
 
 ## REQ-094 Test the pure logic on a PC
 Protocol logic that needs no hardware (framing, CRC, reliable-frame state, queues, chunk headers, command id
 memory, NTRIP parsing, recovery decisions) runs in host tests in CI.
 Source: Mower-Gateway-Architecture §2 (finding 5), §1.5 (tests).
+
+## REQ-100 Let a phone drive the mower over local Wi-Fi
+A phone near the mower connects to the gateway over Wi-Fi and sends the same autopilot commands and live-driving
+setpoints as the server. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1).
+Source: Mower-Protocol §1 (gateway role: "later a local link"), §9 (last paragraph); owner (2026-11-22, PR #122).
