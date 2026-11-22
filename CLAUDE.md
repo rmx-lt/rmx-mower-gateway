@@ -17,7 +17,7 @@ wrong (mark what you verified on hardware and when), per
 Work and open questions are GitHub issues in this repo, on the Blade of Grass project
 (https://github.com/orgs/rmx-lt/projects/1), not notes in markdown files.
 
-**Requirements come first.** `arch/requirements.md` is the source of truth for what the firmware must do. A new
+**Requirements come first.** `.esp-architecture/requirements.md` is the source of truth for what the firmware must do. A new
 feature or behaviour change starts with its requirement there (`F-REQ-nnn` or `NF-REQ-nnn`); its issue, code and
 wiki pages cite the ID. Never make a requirement point at code or a wiki page. Read the existing requirements
 before adding one: update a requirement that already covers the need rather than adding a near-duplicate.
