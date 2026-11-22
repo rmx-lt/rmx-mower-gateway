@@ -33,9 +33,9 @@ is near the mower to press a button.
 Source: Mower-Gateway-Architecture §4.3 (recovery ladder step 2); Mower-Gateway-PPP.
 
 ## REQ-003 Escalate when the link is half dead
-A link that is up but does not carry the server is recovered in steps: MQTT down with PPP up for a set time
-(5 min) → hang up and redial; server link down for a longer set time (30 min) → restart the board. The times are
-build-time settings.
+When the data connection is up but the server cannot be reached, the gateway gets back on line by itself,
+trying the least disruptive step first and restarting the board only as a last resort. It does not act on short
+outages the network or the server recover from on their own.
 Source: Mower-Gateway-Architecture §4.3 (recovery ladder steps 1 and 3).
 
 ## REQ-004 Set the clock from network time before TLS
@@ -223,7 +223,8 @@ board's flash.
 Source: `CLAUDE.md` (rules).
 
 ## REQ-080 Recover from a stuck task
-A firmware task that stops making progress for a set time (120 s) restarts the board, with the reason logged.
+A firmware task that stops making progress is detected and the board restarts, with the reason logged. A task
+that legitimately waits a long time (a redial) is not mistaken for a stuck one.
 Source: Mower-Gateway-Architecture §4.3.
 
 ## REQ-081 Never interrupt an image write
