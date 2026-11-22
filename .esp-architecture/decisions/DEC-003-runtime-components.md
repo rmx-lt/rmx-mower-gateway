@@ -1,8 +1,8 @@
-# DEC-003 System components
+# DEC-003 Runtime components
 
 ## Context
 
-The `system` subsystem (DEC-001) runs the board: start-up, recovery, and the few services every other subsystem needs.
+The `runtime` subsystem (DEC-001) runs the board: start-up, recovery, and the few services every other subsystem needs.
 In the as-built code these jobs are spread over `app_main`, `supervisor`, `gwstate`, `settings`, `gw_tasks`, `gw_link`
 and the codec's `recovery` unit, with two wrong-way dependencies:
 

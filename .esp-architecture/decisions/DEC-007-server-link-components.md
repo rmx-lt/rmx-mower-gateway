@@ -41,6 +41,7 @@ All three components are in the `links` layer (DEC-002).
 - F-REQ-071 (`provisioning_console`)
 - NF-REQ-010 (the key is never logged or sent)
 - NF-REQ-011 (trust only the server's roots)
+- NF-REQ-012 (the key and certificate live only in the board's flash, never in the image)
 
 ## Rules
 

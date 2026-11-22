@@ -23,14 +23,14 @@ Seven subsystems, one per external link plus one that runs the board:
 | `autopilot_link` | The board-link UART, framing, reliable delivery, relaying, heartbeat, the autopilot reset line |
 | `corrections` | The NTRIP caster session |
 | `local_link` | The Wi-Fi link to a phone (planned) |
-| `system` | Start-up order, recovery, task liveness, the settings store, boot counter, clock, link state |
+| `runtime` | Start-up order, recovery, task liveness, the settings store, boot counter, clock, link state |
 
 Consequences:
 
 - The shared pure-C codec is split by user: each subsystem keeps its own host-tested core (board-link framing in
   `autopilot_link`, firmware chunks and command handling in `gateway_services`, NTRIP parsing in `corrections`,
-  recovery logic in `system`).
-- The settings store, task table and link state stay together in `system`: every subsystem uses them, and flash
+  recovery logic in `runtime`).
+- The settings store, task table and link state stay together in `runtime`: every subsystem uses them, and flash
   storage needs one owner.
 - Each link counts its own bytes; data-usage counting in `gateway_services` reads those counts from below, so no link
   calls up into services.
@@ -52,7 +52,7 @@ Consequences:
 - NF-REQ-030 (each subsystem's pure logic is its own host-tested core)
 - F-REQ-051 (the autopilot's traffic is relayed by its own subsystem, which never reads payloads)
 - F-REQ-080 (the phone link is its own subsystem, added without touching the others)
-- NF-REQ-001, NF-REQ-002, NF-REQ-004 (recovery is owned by one subsystem, `system`)
+- NF-REQ-001, NF-REQ-002, NF-REQ-004 (recovery is owned by one subsystem, `runtime`)
 
 ## Rules
 

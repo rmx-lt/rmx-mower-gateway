@@ -1,0 +1,179 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/jRmx0/esp-architecture/development/plugin/schema/architecture.schema.json
+#
+# The gateway's target architecture: what the code is refactored toward, not the code as it is today.
+# Requirements: requirements.md. Every subsystem, layer and component cites the decisions in decisions/.
+# Components without a built counterpart yet (autopilot link, phone link) are planned.
+version: 1
+system:
+  name: rmx-mower-gateway
+  description: The mower's communications board. Links the autopilot to rmx-server over LTE (MQTT over TLS), relays RTK corrections from an NTRIP caster, and lets a phone nearby drive the mower over Wi-Fi.
+
+context:
+  actors:
+    - { id: rmx_server, kind: system, description: "MQTT broker and server app (mqtt.rmx.lt)" }
+    - { id: ntrip_caster, kind: system, description: NTRIP caster for RTK corrections }
+    - { id: autopilot, kind: device, description: The mower's autopilot board }
+    - { id: phone, kind: device, description: A phone near the mower }
+    - { id: installer, kind: person, description: Provisions the device certificate over the serial console }
+  flows:
+    - { from: system, to: rmx_server, data: "state, telemetry, acks, autopilot messages" }
+    - { from: rmx_server, to: system, data: "commands, firmware, autopilot messages" }
+    - { from: system, to: ntrip_caster, data: GGA }
+    - { from: ntrip_caster, to: system, data: RTCM corrections }
+    - { from: autopilot, to: system, data: "messages, GGA, heartbeat" }
+    - { from: system, to: autopilot, data: "messages, corrections, heartbeat, reset" }
+    - { from: phone, to: system, data: "commands, setpoints" }
+    - { from: installer, to: system, data: certificate chain }
+
+hardware:
+  processor: ESP32-WROVER-E
+  description: LilyGo T-SIM7600 with the SIM7600G-H modem. The module has 16 MB flash and 8 MB PSRAM on its internal SPI0/1 bus.
+  buses:
+    - { id: uart_modem, kind: uart, peripheral: UART1, description: "Modem data, TX 27 RX 26, no flow control" }
+    - { id: gpio_modem, kind: gpio, description: "Modem control: PWRKEY 4, FLIGHT 25, DTR 32, STATUS 34" }
+    - { id: gpio_led, kind: gpio, description: "User LED, GPIO 12 (strapping pin, low at reset)" }
+    - { id: uart_board, kind: uart, peripheral: UART2, description: "Board link, TX 23 RX 19, RTS/CTS, 921600 baud" }
+    - { id: gpio_reset, kind: gpio, description: "Autopilot reset, GPIO 21, open drain" }
+    - { id: uart_console, kind: uart, peripheral: UART0, description: Provisioning console through the USB bridge }
+    - { id: wifi, kind: other, peripheral: Wi-Fi, description: The ESP32's Wi-Fi radio }
+    - { id: spi_flash, kind: spi, peripheral: SPI0/1, description: "Internal flash, shared through ESP-IDF's partition and NVS drivers (DEC-012)" }
+  devices:
+    - { id: sim7600, name: SIM7600G-H modem, bus: [uart_modem, gpio_modem], description: LTE modem }
+    - { id: user_led, name: user LED, bus: gpio_led, description: "Blue LED, on while PPP is up" }
+    - { id: autopilot_board, name: autopilot board, bus: [uart_board, gpio_reset], description: The mower's ESP32-P4 autopilot }
+    - { id: usb_bridge, name: USB-UART bridge, bus: uart_console, description: CH9102 to the provisioning PC }
+    - { id: phone_handset, name: phone, bus: wifi, description: A phone near the mower }
+    - id: flash
+      name: flash
+      bus: spi_flash
+      description: 16 MB in the module
+      holds: [nvs (settings, identity), ota_0 and ota_1 (4 MB app slots), coredump]
+
+subsystems:
+  - { id: runtime, description: "Start-up, recovery, settings, boot counter, clock, link state", decisions: [DEC-001, DEC-003] }
+  - { id: cellular, description: "LTE modem, PPP, signal, the user LED", decisions: [DEC-001, DEC-005] }
+  - { id: server_link, description: "MQTT over TLS to the server, the device identity", decisions: [DEC-001, DEC-007] }
+  - { id: gateway_services, description: "Commands, firmware update, state, metrics, monitor", decisions: [DEC-001, DEC-008] }
+  - { id: autopilot_link, description: "Board link to the autopilot and the relay of its MQTT traffic", decisions: [DEC-001, DEC-009] }
+  - { id: corrections, description: NTRIP corrections for the autopilot's RTK receiver, decisions: [DEC-001, DEC-010] }
+  - { id: local_link, description: A phone driving the mower over Wi-Fi (planned), decisions: [DEC-001, DEC-011] }
+
+layers:
+  - { id: app, description: Start-up order and the supervisor, decisions: [DEC-002] }
+  - { id: services, description: "What the gateway offers on its links: commands, update, state, metrics, relay, NTRIP, phone", decisions: [DEC-002] }
+  - { id: links, description: "Transports: modem and PPP, MQTT with its identity, board link, Wi-Fi", decisions: [DEC-002] }
+  - { id: platform, description: "Settings store, task table, link state, clock, boot", decisions: [DEC-002] }
+  - { id: pure, description: "No ESP-IDF or FreeRTOS includes; tested on a PC", decisions: [DEC-002] }
+
+allow_sideways: true
+
+components:
+  # runtime
+  - id: app_main
+    subsystem: runtime
+    layer: app
+    path: main
+    description: Start-up order only
+    depends_on: [supervisor, settings, boot, identity, provisioning_console, link_state, clock, cell, mqtt_link, commands, firmware_update, gateway_state, metrics, monitor, relay, ntrip, phone_link]
+    decisions: [DEC-003]
+  - id: supervisor
+    subsystem: runtime
+    layer: app
+    path: components/supervisor
+    description: Recovery ladder, stuck-task check, the server-link-up sequence
+    depends_on: [recovery, tasks, link_state, boot, cell, mqtt_link, firmware_update, gateway_state, metrics]
+    requirements: [NF-REQ-002, NF-REQ-004, NF-REQ-005, F-REQ-011]
+    decisions: [DEC-003, DEC-004]
+  - { id: boot, subsystem: runtime, layer: platform, path: components/boot, description: "Boot counter, restart with a reason, crash-dump notice", depends_on: [settings], hardware: [flash], requirements: [F-REQ-013, NF-REQ-006], decisions: [DEC-003, DEC-012] }
+  - { id: clock, subsystem: runtime, layer: platform, path: components/clock, description: "Network time, clock valid, message time", depends_on: [link_state], requirements: [F-REQ-002], decisions: [DEC-003] }
+  - { id: settings, subsystem: runtime, layer: platform, path: components/settings, description: The only owner of the NVS store, hardware: [flash], requirements: [NF-REQ-007], decisions: [DEC-003, DEC-012] }
+  - { id: tasks, subsystem: runtime, layer: platform, path: components/tasks, description: "Task table, task creation, liveness counters", requirements: [NF-REQ-004], decisions: [DEC-003] }
+  - { id: link_state, subsystem: runtime, layer: platform, path: components/link_state, description: "Link-state bits and change events, the server-link rule", requirements: [F-REQ-011], decisions: [DEC-003] }
+  - { id: recovery, subsystem: runtime, layer: pure, path: components/recovery, description: Recovery and liveness decisions, requirements: [NF-REQ-002, NF-REQ-004, NF-REQ-030], decisions: [DEC-003] }
+
+  # cellular
+  - { id: modem_power, subsystem: cellular, layer: links, path: components/modem_power, description: "PWRKEY, FLIGHT, DTR, STATUS", hardware: [sim7600], requirements: [F-REQ-004], decisions: [DEC-005, DEC-012] }
+  - id: cell
+    subsystem: cellular
+    layer: links
+    path: components/cell
+    description: "Modem connection and PPP, redial, AT sessions, signal, operator, netif byte counts, user LED"
+    depends_on: [modem_power, link_state, tasks]
+    hardware: [sim7600, user_led]
+    requirements: [F-REQ-001, F-REQ-003, F-REQ-005, NF-REQ-001]
+    decisions: [DEC-005, DEC-006, DEC-012]
+
+  # server_link
+  - id: mqtt_link
+    subsystem: server_link
+    layer: links
+    path: components/mqtt_link
+    description: "MQTT over TLS, routes, reassembly, per-topic byte counts, status and last will"
+    depends_on: [identity, link_state, clock]
+    requirements: [F-REQ-001, F-REQ-010, F-REQ-014, NF-REQ-011]
+    decisions: [DEC-007]
+  - { id: identity, subsystem: server_link, layer: links, path: components/identity, description: "Device key, certificate chain, device name", depends_on: [settings], requirements: [F-REQ-070, NF-REQ-010, NF-REQ-012], decisions: [DEC-007] }
+  - { id: provisioning_console, subsystem: server_link, layer: links, path: components/provisioning_console, description: "Serial commands: CSR, store or clear the chain", depends_on: [identity, boot, tasks], hardware: [usb_bridge], requirements: [F-REQ-071], decisions: [DEC-007, DEC-012] }
+
+  # gateway_services
+  - { id: commands, subsystem: gateway_services, layer: services, path: components/commands, description: "Command queue, registry, acks, ping and restart, busy during an update", depends_on: [cmd_core, mqtt_link, link_state, clock, boot, tasks], requirements: [F-REQ-020, F-REQ-021, F-REQ-022, NF-REQ-010], decisions: [DEC-008] }
+  - { id: cmd_core, subsystem: gateway_services, layer: pure, path: components/cmd_core, description: "Command parsing, id memory, expiry", requirements: [F-REQ-020, NF-REQ-030], decisions: [DEC-008] }
+  - id: firmware_update
+    subsystem: gateway_services
+    layer: services
+    path: components/firmware_update
+    description: "The ota command: download, checks, rollback, result after restart"
+    depends_on: [fw_chunk, commands, mqtt_link, cell, settings, boot, link_state, gateway_state, tasks]
+    hardware: [flash]
+    requirements: [F-REQ-030, F-REQ-031, F-REQ-032]
+    decisions: [DEC-008, DEC-012]
+  - { id: fw_chunk, subsystem: gateway_services, layer: pure, path: components/fw_chunk, description: Chunk header and its checks, requirements: [F-REQ-030, NF-REQ-030], decisions: [DEC-008] }
+  - { id: gateway_state, subsystem: gateway_services, layer: services, path: components/gateway_state, description: "The gateway/state message; owners set their fields", depends_on: [mqtt_link, cell, boot, clock], requirements: [F-REQ-012], decisions: [DEC-008] }
+  - { id: metrics, subsystem: gateway_services, layer: services, path: components/metrics, description: "Catalogue, telemetry, signal, system and usage metrics", depends_on: [mqtt_link, cell, boot, clock, tasks], requirements: [F-REQ-060, F-REQ-061, F-REQ-062], decisions: [DEC-008] }
+  - { id: monitor, subsystem: gateway_services, layer: services, path: components/monitor, description: Monitor streams and their budget, depends_on: [metrics, commands, mqtt_link, link_state, clock], requirements: [F-REQ-063, NF-REQ-021], decisions: [DEC-008] }
+
+  # autopilot_link (planned)
+  - id: board_link
+    subsystem: autopilot_link
+    layer: links
+    path: components/board_link
+    description: "UART2 framing, reliable frames, heartbeat, reset line (planned)"
+    depends_on: [bl_codec, link_state, clock, tasks]
+    hardware: [autopilot_board]
+    requirements: [F-REQ-050, F-REQ-052, F-REQ-055, F-REQ-056]
+    decisions: [DEC-009, DEC-012]
+  - { id: bl_codec, subsystem: autopilot_link, layer: pure, path: components/bl_codec, description: "COBS, CRC-16, frames, reliable state, offline queue", requirements: [F-REQ-050, F-REQ-052, F-REQ-054, NF-REQ-030], decisions: [DEC-009] }
+  - id: relay
+    subsystem: autopilot_link
+    layer: services
+    path: components/relay
+    description: "The autopilot's topics to and from MQTT, subscriptions, offline queue, autopilot_reset (planned)"
+    depends_on: [board_link, mqtt_link, bl_codec, commands, gateway_state, metrics]
+    requirements: [F-REQ-051, F-REQ-053, F-REQ-054, F-REQ-056]
+    decisions: [DEC-009]
+
+  # corrections
+  - id: ntrip
+    subsystem: corrections
+    layer: services
+    path: components/ntrip
+    description: "Caster session, settings, commands, GGA schedule, state field, byte counts"
+    depends_on: [ntrip_codec, board_link, settings, link_state, commands, gateway_state, metrics, tasks]
+    requirements: [F-REQ-040, F-REQ-041, F-REQ-042, NF-REQ-003, NF-REQ-012]
+    decisions: [DEC-010]
+  - { id: ntrip_codec, subsystem: corrections, layer: pure, path: components/ntrip_codec, description: "Request, answer parsing, chunked decoding, GGA checks", requirements: [F-REQ-041, NF-REQ-030], decisions: [DEC-010] }
+
+  # local_link (planned)
+  - { id: wifi_link, subsystem: local_link, layer: links, path: components/wifi_link, description: Wi-Fi connection to the phone (planned), depends_on: [link_state], hardware: [phone_handset], requirements: [F-REQ-080], decisions: [DEC-011, DEC-012] }
+  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: The phone's commands and setpoints to the board link (planned), depends_on: [wifi_link, board_link], requirements: [F-REQ-080], decisions: [DEC-011] }
+
+tasks:
+  - { id: bl_rx, component: board_link, priority: 10, stack: 4096, description: Board-link receiver }
+  - { id: bl_tx, component: board_link, priority: 9, stack: 4096, description: The only UART2 writer }
+  - { id: ntrip, component: ntrip, priority: 6, stack: 4096, description: Caster session }
+  - { id: cell, component: cell, priority: 5, stack: 4096, description: Redial and the signal reading }
+  - { id: commands, component: commands, priority: 4, stack: 6144, description: Command queue }
+  - { id: supervisor, component: supervisor, priority: 3, stack: 6144, description: Recovery and the server-link-up sequence }
+  - { id: ota, component: firmware_update, priority: 3, stack: 12288, description: One update }
+  - { id: telemetry, component: metrics, priority: 3, stack: 6144, description: Telemetry tick }
+  - { id: console, component: provisioning_console, priority: 2, stack: 6144, description: Serial commands }
