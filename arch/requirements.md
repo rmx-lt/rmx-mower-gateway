@@ -40,8 +40,8 @@ Source: Mower-Gateway-Architecture §4.3 (recovery ladder steps 1 and 3).
 
 ## REQ-004 Set the clock from network time before TLS
 The gateway sets its clock with SNTP after the data connection is up and keeps it within 0.1 s. It opens no TLS
-connection before the clock is set, because TLS checks certificate dates; it restarts when no time arrives within
-2 minutes. Command expiry (`expires_at`) and the autopilot's clock depend on it.
+connection before the clock is set, because TLS checks certificate dates; when no time arrives, it does not wait
+forever but starts over. Command expiry (`expires_at`) and the autopilot's clock depend on it.
 Source: Mower-Protocol §4.1; Mower-Gateway-Plan (certificate dates); `main/app_main.c`.
 
 ## REQ-005 Ask the modem while online without losing the connection
@@ -109,13 +109,13 @@ request are dropped. The running firmware is untouched until the whole image che
 Source: Mower-Protocol §12; Mower-Gateway (Firmware updates, retries).
 
 ## REQ-031 Install only a valid, signed image
-Before switching, the gateway checks the image's signature (our RSA-3072 key), project name, version
+Before switching, the gateway checks the image's signature (signed with the project's own key), project name, version
 (`same_version`), size when given (`bad_size`) and the SHA-256 of the whole file (`bad_image`). It refuses to start
 an update when the signal is too weak (`low_signal`).
 Source: Mower-Protocol §6.5; Mower-Gateway (Firmware updates).
 
 ## REQ-032 Keep a new image only when it reaches the server
-A new image confirms itself only when it reaches the broker within a set time (300 s); otherwise the previous
+A new image confirms itself only when it reaches the broker within a limited time; otherwise the previous
 image boots again. The command id survives the restart, and the image that runs afterwards sends the final ack:
 `done` with `{version, previous, partition}`, or `failed` with `rolled_back`.
 Source: Mower-Protocol §6.5; Mower-Gateway (Firmware updates, report).
@@ -131,10 +131,10 @@ removed by `ntrip_clear`. They survive restarts and updates.
 Source: Mower-Protocol §6.4, §13; Mower-Gateway (NTRIP client).
 
 ## REQ-042 Run the caster session
-The gateway sends the autopilot's GGA sentence to the caster after the request and every 10 s, and stays
-`waiting` until a GGA with a position arrives. No bytes for 30 s, a closed socket or a PPP loss end the session;
-retries start after 10 s and double up to 120 s; a refused login waits 120 s. The session state is reported in
-`gateway/state` (`ntrip`).
+The gateway forwards the autopilot's GGA sentences (one every 10 s) to the caster and stays `waiting` until a GGA
+with a position arrives. A silent caster, a closed socket or a lost data connection ends the session, and the
+gateway connects again by itself, waiting longer after repeated failures and after a refused login so it does not
+hammer the caster. The session state is reported in `gateway/state` (`ntrip`).
 Source: Mower-Protocol §6.2, §13; Mower-Gateway (NTRIP client).
 
 ## REQ-043 Pass corrections to the autopilot unchanged
