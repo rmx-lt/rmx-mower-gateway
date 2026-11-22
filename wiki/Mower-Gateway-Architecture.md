@@ -2,6 +2,8 @@
 
 How the gateway firmware is built, why it was restructured before the board link and the NTRIP client, and what is still open.
 
+**Target architecture (2026-11-23):** the designed target now lives in [`.esp-architecture/`](https://github.com/rmx-lt/rmx-mower-gateway/tree/development/.esp-architecture): one folder per kind of file: the manifest `manifest/architecture.yaml`, generated diagrams `diagrams/diagrams.md`, decision records DEC-001 to DEC-012 in `decisions/`, each citing the requirements in `requirements/requirements.md` it serves. It replaces the target sketch in §3 below (seven subsystems by external link, five layers with the pure core at the bottom, the MQTT client as a link). The sections below still describe the code as built; the refactor toward the target is planned under [#120](https://github.com/rmx-lt/rmx-mower-gateway/issues/120).
+
 Three kinds of statements, kept apart:
 
 - **Code** — read from the source on `development` (commit `79ee777`, firmware 0.4.0, 2026-11-20, after the refactor epic [rmx-mower-gateway#73](https://github.com/rmx-lt/rmx-mower-gateway/issues/73) and the NTRIP client [#63](https://github.com/rmx-lt/rmx-mower-gateway/issues/63)). Not measured on the board unless it says so.
