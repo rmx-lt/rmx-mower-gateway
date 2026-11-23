@@ -10,7 +10,7 @@ flowchart TD
   end
   led["LED"]
   subgraph ph["<b>phone</b>"]
-    pparts["driving<br/>status<br/>setup"]
+    pparts["command<br/>status<br/>setup"]
   end
   usb["USB bridge"]
   subgraph cpu["<b>ESP32</b>"]
@@ -25,7 +25,8 @@ flowchart TD
     con["console"]
     ntrip["corrections"]
     mqtt["server connection"]
-    drive["driving"]
+    phc["phone connection"]
+    msg["message routing"]
     prov["provisioning"]
     cmd["commands"]
     upd["firmware update"]
@@ -58,18 +59,21 @@ flowchart TD
   gp --- ledd --- conn
   pparts --- wf --- wl
   usb --- u0 --- con
-  wl --- drive
-  wl --- prov
+  wl --- phc
+  phc --- msg
+  phc --- prov
   con --- prov
   conn --- mqtt
   conn --- ntrip
   conn --- clk
   conn --- ls
   mqtt --- ls
-  mqtt --- cmd
-  mqtt --- state
-  mqtt --- met
-  mqtt --- relay
+  mqtt --- msg
+  mqtt --- upd
+  msg --- cmd
+  msg --- state
+  msg --- met
+  msg --- relay
   met --- mon
   cmd --- mon
   cmd --- upd
@@ -81,7 +85,6 @@ flowchart TD
   relay --- q
   relay --- bl
   ntrip --- bl
-  drive --- bl
   upd --- fs
   set --- fs
   fs --- sp --- fparts
