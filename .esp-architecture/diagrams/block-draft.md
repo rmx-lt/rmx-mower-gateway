@@ -46,7 +46,9 @@ flowchart TD
     areset["reset"]
     amsg["messages"]
   end
-  fl["<b>flash</b><hr/>settings<br/>identity<br/>app slots<br/>crash dump"]
+  subgraph fl["<b>flash</b>"]
+    fparts["settings<br/>identity<br/>app slots<br/>crash dump"]
+  end
   mdata --- u1 --- conn
   mctl --- gp
   led --- gp
@@ -80,11 +82,11 @@ flowchart TD
   drive --- bl
   upd --- fs
   set --- fs
-  fs --- sp --- fl
+  fs --- sp --- fparts
   bl --- u2 --- amsg
   gp --- areset
   classDef bus stroke:#58a6ff,stroke-dasharray:3 3
   class u1,gp,u2,wf,u0,sp bus
   classDef device fill:none,stroke:#888
-  class modem,mdata,mctl,led,ap,amsg,areset,ph,usb,fl device
+  class modem,mdata,mctl,led,ap,amsg,areset,ph,usb,fparts device
 ```
