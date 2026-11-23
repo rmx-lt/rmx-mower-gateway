@@ -4,7 +4,7 @@ Hand-drawn, not generated. From the hardware to the product function; a line is 
 
 ```mermaid
 flowchart TD
-  modem["<b>modem</b><hr/>data<br/>power control<br/>radio<br/>sleep<br/>status"]
+  modem["<b>modem</b><hr/>data<br/>power<br/>radio<br/>sleep<br/>status"]
   led["LED"]
   ph["phone"]
   usb["USB bridge"]
