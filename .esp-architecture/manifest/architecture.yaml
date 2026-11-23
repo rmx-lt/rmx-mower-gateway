@@ -19,21 +19,21 @@ context:
     - { id: autopilot, kind: device, description: The mower's autopilot board }
   flows:
     - { from: user, to: phone, data: "drives, sets up" }
-    - { from: phone, to: user, data: mower's status }
+    - { from: phone, to: user, data: mower's state }
     - { from: user, to: pc, data: commands }
-    - { from: pc, to: user, data: mower's status }
+    - { from: pc, to: user, data: mower's state }
     - { from: phone, to: rmx_server, data: "commands, certificate request" }
-    - { from: rmx_server, to: phone, data: "mower's status, certificate" }
+    - { from: rmx_server, to: phone, data: "mower's state, certificate" }
     - { from: phone, to: system, data: "driving, certificate" }
-    - { from: system, to: phone, data: "mower's status, certificate request" }
+    - { from: system, to: phone, data: "mower's state, certificate request" }
     - { from: pc, to: rmx_server, data: commands }
-    - { from: rmx_server, to: pc, data: mower's status }
-    - { from: system, to: rmx_server, data: mower's status }
+    - { from: rmx_server, to: pc, data: mower's state }
+    - { from: system, to: rmx_server, data: mower's state }
     - { from: rmx_server, to: system, data: "commands, firmware" }
     - { from: system, to: ntrip_caster, data: position }
     - { from: ntrip_caster, to: system, data: corrections }
     - { from: system, to: autopilot, data: "driving, corrections" }
-    - { from: autopilot, to: system, data: "mower's status, position" }
+    - { from: autopilot, to: system, data: "mower's state, position" }
 
 hardware:
   processor: ESP32-WROVER-E
@@ -175,7 +175,7 @@ components:
 
   # local_link (planned)
   - { id: wifi_link, subsystem: local_link, layer: links, path: components/wifi_link, description: Wi-Fi connection to the phone (planned), depends_on: [link_state], hardware: [phone_handset], requirements: [F-REQ-080], decisions: [DEC-011, DEC-012] }
-  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: "The phone's commands and setpoints to the board link, the mower's status back, provisioning (planned)", depends_on: [wifi_link, board_link, identity, boot], requirements: [F-REQ-072, F-REQ-080], decisions: [DEC-011] }
+  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: "The phone's commands and setpoints to the board link, the mower's state back, provisioning (planned)", depends_on: [wifi_link, board_link, identity, boot], requirements: [F-REQ-072, F-REQ-080], decisions: [DEC-011] }
 
 tasks:
   - { id: bl_rx, component: board_link, priority: 10, stack: 4096, description: Board-link receiver }

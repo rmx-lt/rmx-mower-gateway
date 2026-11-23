@@ -9,7 +9,7 @@ so every service would have to know both hosts and check the lock itself.
 ## Decision
 
 - Commands and messages from every host pass one point, and the services behind it do not know which host sent them.
-  An answer goes back to the host that asked; the mower's status goes to every connected host.
+  An answer goes back to the host that asked; the mower's state goes to every connected host.
 - The lock is checked at that one point, before a command reaches a gateway service or the autopilot.
 - The gateway knows two hosts, the server and the phone, by the connection a message came over. It does not need to know
   the devices behind the server, and it still does not read autopilot payloads (F-REQ-051): the topic tells whether a
