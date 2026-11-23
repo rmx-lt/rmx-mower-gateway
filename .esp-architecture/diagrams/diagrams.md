@@ -13,14 +13,14 @@ flowchart TD
   n_rmx_server["rmx-server"]
   n_ntrip_caster["NTRIP caster"]
   n_autopilot{{"autopilot"}}
-  n_user <-->|"↓ control, setup<br/>↑ mower's state"| n_phone
-  n_user <-->|"↓ control<br/>↑ mower's state"| n_pc
-  n_phone <-->|"↓ control, certificate request<br/>↑ mower's state, certificate"| n_rmx_server
-  n_phone <-->|"↓ control, certificate<br/>↑ mower's state, certificate request"| n_system
-  n_pc <-->|"↓ control<br/>↑ mower's state"| n_rmx_server
-  n_rmx_server <-->|"↓ control, firmware<br/>↑ mower's state"| n_system
+  n_user <-->|"↓ control, setup<br/>↑ state"| n_phone
+  n_user <-->|"↓ control<br/>↑ state"| n_pc
+  n_phone <-->|"↓ control, certificate request<br/>↑ state, certificate"| n_rmx_server
+  n_phone <-->|"↓ control, certificate<br/>↑ state, certificate request"| n_system
+  n_pc <-->|"↓ control<br/>↑ state"| n_rmx_server
+  n_rmx_server <-->|"↓ control, firmware<br/>↑ state"| n_system
   n_system <-->|"↓ position<br/>↑ corrections"| n_ntrip_caster
-  n_system <-->|"↓ control, corrections<br/>↑ mower's state, position"| n_autopilot
+  n_system <-->|"↓ control, corrections<br/>↑ state, position"| n_autopilot
 ```
 
 ## Block
