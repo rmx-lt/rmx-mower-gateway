@@ -40,7 +40,7 @@ flowchart TD
     sp["SPI0/1"]
   end
   ap["autopilot"]
-  fl["<b>flash</b><br/>settings<br/>identity<br/>app slots<br/>crash dump"]
+  fl["<b>flash</b><hr/>settings<br/>identity<br/>app slots<br/>crash dump"]
   modem --- u1 --- conn
   modem --- gp
   led --- gp
