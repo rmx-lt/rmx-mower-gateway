@@ -17,7 +17,8 @@ context:
     - { id: ntrip_caster, name: NTRIP caster, kind: system, description: NTRIP caster for RTK corrections }
     - { id: autopilot, kind: device, description: The mower's autopilot board }
   flows:
-    - { from: user, to: phone, data: "watches, drives, sets up" }
+    - { from: user, to: phone, data: "drives, sets up" }
+    - { from: phone, to: user, data: mower's status }
     - { from: phone, to: rmx_server, data: "commands, certificate request" }
     - { from: rmx_server, to: phone, data: "mower's status, certificate" }
     - { from: phone, to: system, data: "driving, certificate" }

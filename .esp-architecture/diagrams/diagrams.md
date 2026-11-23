@@ -12,7 +12,7 @@ flowchart TD
   n_rmx_server["rmx-server"]
   n_ntrip_caster["NTRIP caster"]
   n_autopilot{{"autopilot"}}
-  n_user -->|"watches, drives, sets up"| n_phone
+  n_user <-->|"↓ drives, sets up<br/>↑ mower's status"| n_phone
   n_phone <-->|"↓ commands, certificate request<br/>↑ mower's status, certificate"| n_rmx_server
   n_phone <-->|"↓ driving, certificate<br/>↑ mower's status, certificate request"| n_system
   n_rmx_server <-->|"↓ commands, firmware<br/>↑ mower's status"| n_system
