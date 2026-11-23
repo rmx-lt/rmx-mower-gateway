@@ -19,7 +19,9 @@ flowchart TD
   end
   subgraph cpu["<b>ESP32</b>"]
     u1["UART1"]
-    gp["GPIO"]
+    gm["GPIO 4, 25, 32, 34"]
+    gl["GPIO 12"]
+    gr["GPIO 21"]
     wf["Wi-Fi"]
     u0["UART0"]
     conn["modem connection"]
@@ -58,10 +60,8 @@ flowchart TD
     fparts["settings<br/>identity<br/>app slots<br/>crash dump"]
   end
   mdata --- u1 --- conn
-  mctl --- gp
-  lparts --- gp
-  gp --- pwr --- conn
-  gp --- ledd --- conn
+  mctl --- gm --- pwr --- conn
+  lparts --- gl --- ledd --- conn
   pparts --- wf --- wl
   uparts --- u0 --- con
   wl --- phc
@@ -95,9 +95,9 @@ flowchart TD
   set --- fs
   fs --- sp --- fparts
   bl --- u2 --- amsg
-  gp --- areset
+  bl --- gr --- areset
   classDef bus stroke:#58a6ff,stroke-dasharray:3 3
-  class u1,gp,u2,wf,u0,sp bus
+  class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
