@@ -18,21 +18,21 @@ context:
     - { id: ntrip_caster, name: NTRIP caster, kind: system, description: NTRIP caster for RTK corrections }
     - { id: autopilot, kind: device, description: The mower's autopilot board }
   flows:
-    - { from: user, to: phone, data: "drives, sets up" }
+    - { from: user, to: phone, data: "control, setup" }
     - { from: phone, to: user, data: mower's state }
-    - { from: user, to: pc, data: commands }
+    - { from: user, to: pc, data: control }
     - { from: pc, to: user, data: mower's state }
-    - { from: phone, to: rmx_server, data: "commands, certificate request" }
+    - { from: phone, to: rmx_server, data: "control, certificate request" }
     - { from: rmx_server, to: phone, data: "mower's state, certificate" }
-    - { from: phone, to: system, data: "driving, certificate" }
+    - { from: phone, to: system, data: "control, certificate" }
     - { from: system, to: phone, data: "mower's state, certificate request" }
-    - { from: pc, to: rmx_server, data: commands }
+    - { from: pc, to: rmx_server, data: control }
     - { from: rmx_server, to: pc, data: mower's state }
     - { from: system, to: rmx_server, data: mower's state }
-    - { from: rmx_server, to: system, data: "commands, firmware" }
+    - { from: rmx_server, to: system, data: "control, firmware" }
     - { from: system, to: ntrip_caster, data: position }
     - { from: ntrip_caster, to: system, data: corrections }
-    - { from: system, to: autopilot, data: "driving, corrections" }
+    - { from: system, to: autopilot, data: "control, corrections" }
     - { from: autopilot, to: system, data: "mower's state, position" }
 
 hardware:
