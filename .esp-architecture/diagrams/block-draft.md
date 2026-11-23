@@ -9,7 +9,9 @@ flowchart TD
     mdata["data"]
   end
   led["LED"]
-  ph["phone"]
+  subgraph ph["<b>phone</b>"]
+    pparts["driving<br/>status<br/>setup"]
+  end
   usb["USB bridge"]
   subgraph cpu["<b>ESP32</b>"]
     u1["UART1"]
@@ -54,7 +56,7 @@ flowchart TD
   led --- gp
   gp --- pwr --- conn
   gp --- ledd --- conn
-  ph --- wf --- wl
+  pparts --- wf --- wl
   usb --- u0 --- con
   wl --- drive
   wl --- prov
@@ -88,5 +90,5 @@ flowchart TD
   classDef bus stroke:#58a6ff,stroke-dasharray:3 3
   class u1,gp,u2,wf,u0,sp bus
   classDef device fill:none,stroke:#888
-  class modem,mdata,mctl,led,ap,amsg,areset,ph,usb,fl,fparts device
+  class modem,mdata,mctl,led,ap,amsg,areset,ph,pparts,usb,fl,fparts device
 ```
