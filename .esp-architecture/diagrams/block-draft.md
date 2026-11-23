@@ -1,10 +1,13 @@
 # Block diagram draft
 
-Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Dashed blue: ways of communicating.
+Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. A device is split by the bus its parts use.
 
 ```mermaid
 flowchart TD
-  modem["<b>modem</b><hr/>data<br/>power<br/>radio<br/>sleep<br/>status"]
+  subgraph modem["<b>modem</b>"]
+    mctl["power<br/>radio<br/>sleep<br/>status"]
+    mdata["data"]
+  end
   led["LED"]
   ph["phone"]
   usb["USB bridge"]
@@ -39,10 +42,13 @@ flowchart TD
     u2["UART2"]
     sp["SPI0/1"]
   end
-  ap["<b>autopilot</b><hr/>messages<br/>reset"]
+  subgraph ap["<b>autopilot</b>"]
+    areset["reset"]
+    amsg["messages"]
+  end
   fl["<b>flash</b><hr/>settings<br/>identity<br/>app slots<br/>crash dump"]
-  modem --- u1 --- conn
-  modem --- gp
+  mdata --- u1 --- conn
+  mctl --- gp
   led --- gp
   gp --- pwr --- conn
   gp --- ledd --- conn
@@ -75,10 +81,10 @@ flowchart TD
   upd --- fs
   set --- fs
   fs --- sp --- fl
-  bl --- u2 --- ap
-  gp --- ap
+  bl --- u2 --- amsg
+  gp --- areset
   classDef bus stroke:#58a6ff,stroke-dasharray:3 3
   class u1,gp,u2,wf,u0,sp bus
   classDef device fill:none,stroke:#888
-  class modem,led,ap,ph,usb,fl device
+  class modem,mdata,mctl,led,ap,amsg,areset,ph,usb,fl device
 ```
