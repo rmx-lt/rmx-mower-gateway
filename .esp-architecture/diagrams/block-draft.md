@@ -27,6 +27,7 @@ flowchart TD
     mqtt["server connection"]
     phc["phone connection"]
     msg["message routing"]
+    lock["driving lock"]
     prov["provisioning"]
     cmd["commands"]
     upd["firmware update"]
@@ -70,6 +71,7 @@ flowchart TD
   mqtt --- ls
   mqtt --- msg
   mqtt --- upd
+  msg --- lock
   msg --- cmd
   msg --- state
   msg --- met
