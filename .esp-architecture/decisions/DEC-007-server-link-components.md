@@ -15,11 +15,13 @@ All three components are in the `links` layer (DEC-002).
 |---|---|
 | `mqtt_link` | The MQTT client over TLS: clean session, 15 s keep-alive, retained status and last will, the route table (gateway, autopilot and absolute topics), reassembly of fragmented messages, its own per-topic byte counts; reports "MQTT up" and "server online" to `link_state` |
 | `identity` | The device key (made on the board, never sent anywhere), the certificate chain, the device name from the certificate |
-| `provisioning_console` | The serial commands on UART0 that make a CSR, store a chain or clear it |
+| `provisioning_console` | The serial commands on UART0 that make a CSR, store a chain or clear it: the workshop way, with a PC |
 
 - `mqtt_link` calls nothing above it: it keeps its own per-topic counts, read by data-usage counting from below.
 - `devcert` and `creds` become `identity` and `provisioning_console`, so `mqtt_link` does not depend on a UART0 command
   parser.
+- `identity` checks a chain against the board's key whoever brings it: the PC through `provisioning_console` or the phone
+  through `phone_link` (DEC-011).
 - The server-link rule (up, lost after 10 s) stays in `link_state` (DEC-003); `mqtt_link` only reports its two facts.
 - TLS trusts only the server's root certificates, set in the build configuration `mqtt_link` uses.
 - `mqtt_link` keeps the contract's topic helpers (ack, firmware request), so the gateway's topics are named in one
@@ -39,6 +41,7 @@ All three components are in the `links` layer (DEC-002).
 - F-REQ-014 (fragmented messages are put back together)
 - F-REQ-070 (`identity`)
 - F-REQ-071 (`provisioning_console`)
+- F-REQ-072 (`identity` makes the request and checks the chain)
 - NF-REQ-010 (the key is never logged or sent)
 - NF-REQ-011 (trust only the server's roots)
 - NF-REQ-012 (the key and certificate live only in the board's flash, never in the image)
