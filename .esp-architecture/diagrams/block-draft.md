@@ -88,5 +88,5 @@ flowchart TD
   classDef bus stroke:#58a6ff,stroke-dasharray:3 3
   class u1,gp,u2,wf,u0,sp bus
   classDef device fill:none,stroke:#888
-  class modem,mdata,mctl,led,ap,amsg,areset,ph,usb,fparts device
+  class modem,mdata,mctl,led,ap,amsg,areset,ph,usb,fl,fparts device
 ```
