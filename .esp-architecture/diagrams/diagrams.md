@@ -7,19 +7,22 @@ The device and the world around it.
 ```mermaid
 flowchart LR
   n_system[["<b>rmx-mower-gateway</b>"]]
+  n_user(["user"])
+  n_phone{{"phone"}}
   n_rmx_server["rmx_server"]
   n_ntrip_caster["ntrip_caster"]
   n_autopilot{{"autopilot"}}
-  n_phone{{"phone"}}
-  n_installer(["installer"])
-  n_system -->|"state, telemetry, acks, autopilot messages"| n_rmx_server
-  n_rmx_server -->|"commands, firmware, autopilot messages"| n_system
-  n_system -->|"GGA"| n_ntrip_caster
-  n_ntrip_caster -->|"RTCM corrections"| n_system
-  n_autopilot -->|"messages, GGA, heartbeat"| n_system
-  n_system -->|"messages, corrections, heartbeat, reset"| n_autopilot
-  n_phone -->|"commands, setpoints"| n_system
-  n_installer -->|"certificate chain"| n_system
+  n_user -->|"watches, drives, sets up"| n_phone
+  n_phone -->|"commands, certificate request"| n_rmx_server
+  n_rmx_server -->|"mower's status, certificate"| n_phone
+  n_phone -->|"driving, certificate"| n_system
+  n_system -->|"certificate request"| n_phone
+  n_system -->|"mower's status"| n_rmx_server
+  n_rmx_server -->|"commands, firmware"| n_system
+  n_system -->|"position"| n_ntrip_caster
+  n_ntrip_caster -->|"corrections"| n_system
+  n_system -->|"driving, corrections"| n_autopilot
+  n_autopilot -->|"mower's status, position"| n_system
 ```
 
 ## Block
@@ -140,6 +143,7 @@ flowchart LR
   n_cellular --- n_gateway_services
   n_server_link --- n_gateway_services
   n_server_link --- n_autopilot_link
+  n_server_link --- n_local_link
   n_gateway_services --- n_autopilot_link
   n_autopilot_link --- n_local_link
   n_corrections ~~~ n_cellular
@@ -159,7 +163,7 @@ flowchart LR
 | `gateway_services` | commands, cmd_core, firmware_update, fw_chunk, gateway_state, metrics, monitor | Commands, firmware update, state, metrics, monitor |
 | `autopilot_link` | board_link, bl_codec, relay | Board link to the autopilot and the relay of its MQTT traffic |
 | `corrections` | ntrip, ntrip_codec | NTRIP corrections for the autopilot's RTK receiver |
-| `local_link` | wifi_link, phone_link | A phone driving the mower over Wi-Fi (planned) |
+| `local_link` | wifi_link, phone_link | A phone driving the mower and setting it up over Wi-Fi (planned) |
 
 ## Organigram
 
@@ -282,6 +286,8 @@ flowchart TD
   n_wifi_link --> n_link_state
   n_phone_link --> n_wifi_link
   n_phone_link --> n_board_link
+  n_phone_link --> n_identity
+  n_phone_link --> n_boot
   classDef shared stroke:#d98e04,stroke-width:2px
   class n_settings,n_boot,n_identity,n_link_state,n_clock,n_cell,n_mqtt_link,n_commands,n_firmware_update,n_gateway_state,n_metrics,n_tasks,n_bl_codec,n_board_link shared
 ```

@@ -6,24 +6,28 @@
 version: 1
 system:
   name: rmx-mower-gateway
-  description: The mower's communications board. Links the autopilot to rmx-server over LTE (MQTT over TLS), relays RTK corrections from an NTRIP caster, and lets a phone nearby drive the mower over Wi-Fi.
+  description: The mower's communications board. Links the autopilot to rmx-server over LTE (MQTT over TLS), relays RTK corrections from an NTRIP caster, and lets a phone nearby drive the mower and set it up over Wi-Fi.
 
 context:
+  # How the customer uses the system, not its interfaces.
   actors:
+    - { id: user, kind: person, description: "Owns the mower: watches it, drives it and sets it up" }
+    - { id: phone, kind: device, description: The user's phone }
     - { id: rmx_server, kind: system, description: "MQTT broker and server app (mqtt.rmx.lt)" }
     - { id: ntrip_caster, kind: system, description: NTRIP caster for RTK corrections }
     - { id: autopilot, kind: device, description: The mower's autopilot board }
-    - { id: phone, kind: device, description: A phone near the mower }
-    - { id: installer, kind: person, description: Provisions the device certificate over the serial console }
   flows:
-    - { from: system, to: rmx_server, data: "state, telemetry, acks, autopilot messages" }
-    - { from: rmx_server, to: system, data: "commands, firmware, autopilot messages" }
-    - { from: system, to: ntrip_caster, data: GGA }
-    - { from: ntrip_caster, to: system, data: RTCM corrections }
-    - { from: autopilot, to: system, data: "messages, GGA, heartbeat" }
-    - { from: system, to: autopilot, data: "messages, corrections, heartbeat, reset" }
-    - { from: phone, to: system, data: "commands, setpoints" }
-    - { from: installer, to: system, data: certificate chain }
+    - { from: user, to: phone, data: "watches, drives, sets up" }
+    - { from: phone, to: rmx_server, data: "commands, certificate request" }
+    - { from: rmx_server, to: phone, data: "mower's status, certificate" }
+    - { from: phone, to: system, data: "driving, certificate" }
+    - { from: system, to: phone, data: certificate request }
+    - { from: system, to: rmx_server, data: mower's status }
+    - { from: rmx_server, to: system, data: "commands, firmware" }
+    - { from: system, to: ntrip_caster, data: position }
+    - { from: ntrip_caster, to: system, data: corrections }
+    - { from: system, to: autopilot, data: "driving, corrections" }
+    - { from: autopilot, to: system, data: "mower's status, position" }
 
 hardware:
   processor: ESP32-WROVER-E
@@ -41,7 +45,7 @@ hardware:
     - { id: sim7600, name: SIM7600G-H modem, bus: [uart_modem, gpio_modem], description: LTE modem }
     - { id: user_led, name: user LED, bus: gpio_led, description: "Blue LED, on while PPP is up" }
     - { id: autopilot_board, name: autopilot board, bus: [uart_board, gpio_reset], description: The mower's ESP32-P4 autopilot }
-    - { id: usb_bridge, name: USB-UART bridge, bus: uart_console, description: CH9102 to the provisioning PC }
+    - { id: usb_bridge, name: USB-UART bridge, bus: uart_console, description: CH9102 to the workshop PC }
     - { id: phone_handset, name: phone, bus: wifi, description: A phone near the mower }
     - id: flash
       name: flash
@@ -56,7 +60,7 @@ subsystems:
   - { id: gateway_services, description: "Commands, firmware update, state, metrics, monitor", decisions: [DEC-001, DEC-008] }
   - { id: autopilot_link, description: "Board link to the autopilot and the relay of its MQTT traffic", decisions: [DEC-001, DEC-009] }
   - { id: corrections, description: NTRIP corrections for the autopilot's RTK receiver, decisions: [DEC-001, DEC-010] }
-  - { id: local_link, description: A phone driving the mower over Wi-Fi (planned), decisions: [DEC-001, DEC-011] }
+  - { id: local_link, description: A phone driving the mower and setting it up over Wi-Fi (planned), decisions: [DEC-001, DEC-011] }
 
 layers:
   - { id: app, description: Start-up order and the supervisor, decisions: [DEC-002] }
@@ -112,7 +116,7 @@ components:
     depends_on: [identity, link_state, clock]
     requirements: [F-REQ-001, F-REQ-010, F-REQ-014, NF-REQ-011]
     decisions: [DEC-007]
-  - { id: identity, subsystem: server_link, layer: links, path: components/identity, description: "Device key, certificate chain, device name", depends_on: [settings], requirements: [F-REQ-070, NF-REQ-010, NF-REQ-012], decisions: [DEC-007] }
+  - { id: identity, subsystem: server_link, layer: links, path: components/identity, description: "Device key, certificate chain, device name", depends_on: [settings], requirements: [F-REQ-070, F-REQ-072, NF-REQ-010, NF-REQ-012], decisions: [DEC-007] }
   - { id: provisioning_console, subsystem: server_link, layer: links, path: components/provisioning_console, description: "Serial commands: CSR, store or clear the chain", depends_on: [identity, boot, tasks], hardware: [usb_bridge], requirements: [F-REQ-071], decisions: [DEC-007, DEC-012] }
 
   # gateway_services
@@ -165,7 +169,7 @@ components:
 
   # local_link (planned)
   - { id: wifi_link, subsystem: local_link, layer: links, path: components/wifi_link, description: Wi-Fi connection to the phone (planned), depends_on: [link_state], hardware: [phone_handset], requirements: [F-REQ-080], decisions: [DEC-011, DEC-012] }
-  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: The phone's commands and setpoints to the board link (planned), depends_on: [wifi_link, board_link], requirements: [F-REQ-080], decisions: [DEC-011] }
+  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: "The phone's commands and setpoints to the board link, provisioning (planned)", depends_on: [wifi_link, board_link, identity, boot], requirements: [F-REQ-072, F-REQ-080], decisions: [DEC-011] }
 
 tasks:
   - { id: bl_rx, component: board_link, priority: 10, stack: 4096, description: Board-link receiver }

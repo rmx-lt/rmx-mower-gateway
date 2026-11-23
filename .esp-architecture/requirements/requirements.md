@@ -41,7 +41,7 @@ new requirement.
 | [Cellular link and time](#cellular-link-and-time) | Links | F-REQ-001–009 | The LTE data connection through the modem, the clock set from the network, and the LED that shows the link. |
 | [Server protocol](#server-protocol) | Links | F-REQ-010–019 | The gateway's side of the MQTT contract with the server: topics, server link, state. |
 | [Board link to the autopilot](#board-link-to-the-autopilot) | Links | F-REQ-050–059 | The UART link that relays the autopilot's messages and carries corrections and heartbeats. |
-| [Local link to a phone](#local-link-to-a-phone) | Links | F-REQ-080–089 | A phone near the mower talking to the gateway directly over Wi-Fi. |
+| [Local link to a phone](#local-link-to-a-phone) | Links | F-REQ-080–089 | A phone near the mower driving it, and setting it up, directly over Wi-Fi. |
 | [Identity and provisioning](#identity-and-provisioning) | Links | F-REQ-070–079 | The board's certificate identity and how it gets one. |
 | [Commands](#commands) | Services | F-REQ-020–029 | Commands from the server and their acknowledgements. |
 | [Firmware update](#firmware-update) | Services | F-REQ-030–039 | Downloading, checking and installing a new firmware image. |
@@ -99,7 +99,8 @@ new requirement.
 | ID | Title | Requirement |
 |---|---|---|
 | F-REQ-070 | Identify by a client certificate only | The board makes its own ECDSA P-256 key on first boot; the key never leaves it. Its name is the CN of its certificate and nothing else, so one image fits every board. There are no passwords on the board. |
-| F-REQ-071 | Be provisioned over the serial console | Without a valid certificate the board starts no modem and no MQTT and waits for provisioning. Over UART0 it answers `RMX-CSR <name>`, stores a chain (`RMX-CERT-BEGIN` … `RMX-CERT-END`) and clears it (`RMX-CERT-CLEAR`), touching only the chain, never the key. |
+| F-REQ-071 | Be provisioned from a PC in the workshop | Without a valid certificate the board starts no modem and no MQTT and waits for provisioning by a phone (F-REQ-072) or a PC. A PC uses the serial console: over UART0 the board answers `RMX-CSR <name>`, stores a chain (`RMX-CERT-BEGIN` … `RMX-CERT-END`) and clears it (`RMX-CERT-CLEAR`), touching only the chain, never the key. |
+| F-REQ-072 | Be provisioned by a phone | The user sets the mower up with a phone: over local Wi-Fi the phone names the mower, gets the board's certificate request, passes it to rmx-server and brings the certificate chain back. The board accepts only a chain that matches its own key, and the key never leaves it. The phone only relays: the board needs no server connection until it has a certificate. |
 
 ### Services
 
