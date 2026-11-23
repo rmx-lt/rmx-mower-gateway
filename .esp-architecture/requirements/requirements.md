@@ -41,9 +41,9 @@ new requirement.
 | [Cellular link and time](#cellular-link-and-time) | Links | F-REQ-001–009 | The LTE data connection through the modem, the clock set from the network, and the LED that shows the link. |
 | [Server protocol](#server-protocol) | Links | F-REQ-010–019 | The gateway's side of the MQTT contract with the server: topics, server link, state. |
 | [Board link to the autopilot](#board-link-to-the-autopilot) | Links | F-REQ-050–059 | The UART link that relays the autopilot's messages and carries corrections and heartbeats. |
-| [Local link to a phone](#local-link-to-a-phone) | Links | F-REQ-080–089 | A phone near the mower driving it, and setting it up, directly over Wi-Fi. |
+| [Local link to a phone](#local-link-to-a-phone) | Links | F-REQ-080–089 | A phone near the mower doing what it can do through the server, and setting the mower up, directly over Wi-Fi. |
 | [Identity and provisioning](#identity-and-provisioning) | Links | F-REQ-070–079 | The board's certificate identity and how it gets one. |
-| [Commands](#commands) | Services | F-REQ-020–029 | Commands from the server and their acknowledgements. |
+| [Commands](#commands) | Services | F-REQ-020–029 | Commands, their acknowledgements and whose commands are carried out. |
 | [Firmware update](#firmware-update) | Services | F-REQ-030–039 | Downloading, checking and installing a new firmware image. |
 | [NTRIP corrections](#ntrip-corrections) | Services | F-REQ-040–049 | The caster session that feeds RTK corrections to the autopilot. |
 | [Metrics, telemetry, monitor](#metrics-telemetry-monitor) | Services | F-REQ-060–069 | What the gateway measures and how it reports it. |
@@ -92,7 +92,7 @@ new requirement.
 
 | ID | Title | Requirement |
 |---|---|---|
-| F-REQ-080 | Let a phone drive the mower over local Wi-Fi | A phone near the mower connects to the gateway over Wi-Fi and sends the same autopilot commands and live-driving setpoints as the server. While it is connected, the gateway sends it the mower's status straight from the autopilot, not through the server, so the driver sees it with the least delay and also without LTE. The server still gets its own copy when it can be reached. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1). |
+| F-REQ-080 | Let a phone use the mower over local Wi-Fi | A phone near the mower connects to the gateway over Wi-Fi and is equal to the server: it gives the same commands and live-driving setpoints, only over another connection, and what carries them out does not depend on who gave them. While it is connected, the gateway sends it the mower's status straight from the autopilot, not through the server, so the driver sees it with the least delay and also without LTE. The server still gets its own copy when it can be reached. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1). |
 
 #### Identity and provisioning
 
@@ -111,6 +111,7 @@ new requirement.
 | F-REQ-020 | Answer every command exactly once, also when repeated | Commands use the envelope of Mower-Protocol §5: exactly one final ack (`done` or `failed`), an `accepted` ack first for long-running commands, `expired` / `no_clock` for `expires_at`, `bad_request` and `unknown_cmd`. The gateway remembers each command id with its last ack for at least 2 minutes and sends that ack again for a repeat instead of running the command twice. |
 | F-REQ-021 | Offer the gateway commands | `ping`, `restart` (ack, then restart), `ota`, `ntrip_set`, `ntrip_clear`, `autopilot_reset`, `monitor_start`, `monitor_stop`, with the parameters, results and errors of the contract. |
 | F-REQ-022 | Refuse other commands during an update | While a firmware update runs, every command except `monitor_start` and `monitor_stop` is answered `busy`. |
+| F-REQ-023 | Carry out commands from any host, or only from the one that holds the lock | Hosts are the server and a phone on the local link (F-REQ-080). In **open** mode, the mode after every start, commands from any host are carried out. A host starts a lock session, which live driving needs, and the mode becomes **locked**: only that host's commands and setpoints are carried out, for the gateway and for the autopilot, without exceptions; a gateway command from another host is refused as `locked`. The mode is open again when the holder ends the session or can no longer be reached. Every host can see the mode and the holder. Which of several devices behind the server may command is the server's decision. Not part of Mower-Protocol 0.1. |
 
 #### Firmware update
 

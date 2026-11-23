@@ -126,7 +126,7 @@ components:
   - { id: provisioning_console, subsystem: server_link, layer: links, path: components/provisioning_console, description: "Serial commands: CSR, store or clear the chain", depends_on: [identity, boot, tasks], hardware: [usb_bridge], requirements: [F-REQ-071], decisions: [DEC-007, DEC-012] }
 
   # gateway_services
-  - { id: commands, subsystem: gateway_services, layer: services, path: components/commands, description: "Command queue, registry, acks, ping and restart, busy during an update", depends_on: [cmd_core, mqtt_link, link_state, clock, boot, tasks], requirements: [F-REQ-020, F-REQ-021, F-REQ-022, NF-REQ-010], decisions: [DEC-008] }
+  - { id: commands, subsystem: gateway_services, layer: services, path: components/commands, description: "Command queue, registry, acks, ping and restart, busy during an update", depends_on: [cmd_core, mqtt_link, link_state, clock, boot, tasks], requirements: [F-REQ-020, F-REQ-021, F-REQ-022, F-REQ-023, NF-REQ-010], decisions: [DEC-008, DEC-013] }
   - { id: cmd_core, subsystem: gateway_services, layer: pure, path: components/cmd_core, description: "Command parsing, id memory, expiry", requirements: [F-REQ-020, NF-REQ-030], decisions: [DEC-008] }
   - id: firmware_update
     subsystem: gateway_services
