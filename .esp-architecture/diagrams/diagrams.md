@@ -10,8 +10,8 @@ flowchart TD
   n_user(["user"])
   n_phone{{"phone"}}
   n_pc{{"PC"}}
-  n_rmx_server["rmx-server"]
-  n_ntrip_caster["NTRIP caster"]
+  n_rmx_server@{ img: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDQ4IDQ4Ij48cmVjdCB4PSI0IiB5PSIzIiB3aWR0aD0iNDAiIGhlaWdodD0iMTIiIHJ4PSIyIiBmaWxsPSIjOGI5NDllIi8+PGNpcmNsZSBjeD0iMTEiIGN5PSI5IiByPSIyLjUiIGZpbGw9IiMxZjZmM2EiLz48cGF0aCBkPSJNMjIgOWgxNiIgc3Ryb2tlPSIjMzAzNjNkIiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSI0IiB5PSIxOCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjEyIiByeD0iMiIgZmlsbD0iIzhiOTQ5ZSIvPjxjaXJjbGUgY3g9IjExIiBjeT0iMjQiIHI9IjIuNSIgZmlsbD0iIzFmNmYzYSIvPjxwYXRoIGQ9Ik0yMiAyNGgxNiIgc3Ryb2tlPSIjMzAzNjNkIiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSI0IiB5PSIzMyIgd2lkdGg9IjQwIiBoZWlnaHQ9IjEyIiByeD0iMiIgZmlsbD0iIzhiOTQ5ZSIvPjxjaXJjbGUgY3g9IjExIiBjeT0iMzkiIHI9IjIuNSIgZmlsbD0iIzFmNmYzYSIvPjxwYXRoIGQ9Ik0yMiAzOWgxNiIgc3Ryb2tlPSIjMzAzNjNkIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=", label: "rmx-server", pos: "b", w: 48, h: 48, constraint: "on" }
+  n_ntrip_caster@{ img: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDQ4IDQ4Ij48cmVjdCB4PSI0IiB5PSIzIiB3aWR0aD0iNDAiIGhlaWdodD0iMTIiIHJ4PSIyIiBmaWxsPSIjOGI5NDllIi8+PGNpcmNsZSBjeD0iMTEiIGN5PSI5IiByPSIyLjUiIGZpbGw9IiMxZjZmM2EiLz48cGF0aCBkPSJNMjIgOWgxNiIgc3Ryb2tlPSIjMzAzNjNkIiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSI0IiB5PSIxOCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjEyIiByeD0iMiIgZmlsbD0iIzhiOTQ5ZSIvPjxjaXJjbGUgY3g9IjExIiBjeT0iMjQiIHI9IjIuNSIgZmlsbD0iIzFmNmYzYSIvPjxwYXRoIGQ9Ik0yMiAyNGgxNiIgc3Ryb2tlPSIjMzAzNjNkIiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSI0IiB5PSIzMyIgd2lkdGg9IjQwIiBoZWlnaHQ9IjEyIiByeD0iMiIgZmlsbD0iIzhiOTQ5ZSIvPjxjaXJjbGUgY3g9IjExIiBjeT0iMzkiIHI9IjIuNSIgZmlsbD0iIzFmNmYzYSIvPjxwYXRoIGQ9Ik0yMiAzOWgxNiIgc3Ryb2tlPSIjMzAzNjNkIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=", label: "NTRIP caster", pos: "b", w: 48, h: 48, constraint: "on" }
   n_autopilot{{"autopilot"}}
   n_user <-->|"↓ drives, sets up<br/>↑ mower's status"| n_phone
   n_user <-->|"↓ commands<br/>↑ mower's status"| n_pc
