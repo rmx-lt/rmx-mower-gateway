@@ -4,7 +4,7 @@ Hand-drawn, not generated. From the hardware to the product function; a line is 
 
 ```mermaid
 flowchart TD
-  modem["modem"]
+  modem["<b>modem</b><hr/>data<br/>power control<br/>status"]
   led["LED"]
   ph["phone"]
   usb["USB bridge"]
@@ -39,7 +39,7 @@ flowchart TD
     u2["UART2"]
     sp["SPI0/1"]
   end
-  ap["autopilot"]
+  ap["<b>autopilot</b><hr/>messages<br/>reset"]
   fl["<b>flash</b><hr/>settings<br/>identity<br/>app slots<br/>crash dump"]
   modem --- u1 --- conn
   modem --- gp
