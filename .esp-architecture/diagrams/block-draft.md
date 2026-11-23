@@ -10,7 +10,7 @@ flowchart TD
   end
   led["LED"]
   subgraph ph["<b>phone</b>"]
-    pparts["command<br/>mower status<br/>setup"]
+    pparts["command<br/>mower state<br/>setup"]
   end
   usb["USB bridge"]
   subgraph cpu["<b>ESP32</b>"]
