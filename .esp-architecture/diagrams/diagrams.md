@@ -5,24 +5,19 @@
 The device and the world around it.
 
 ```mermaid
-flowchart LR
+flowchart TD
   n_system[["<b>rmx-mower-gateway</b>"]]
   n_user(["user"])
   n_phone{{"phone"}}
-  n_rmx_server["rmx_server"]
-  n_ntrip_caster["ntrip_caster"]
+  n_rmx_server["rmx-server"]
+  n_ntrip_caster["NTRIP caster"]
   n_autopilot{{"autopilot"}}
   n_user -->|"watches, drives, sets up"| n_phone
-  n_phone -->|"commands, certificate request"| n_rmx_server
-  n_rmx_server -->|"mower's status, certificate"| n_phone
-  n_phone -->|"driving, certificate"| n_system
-  n_system -->|"mower's status, certificate request"| n_phone
-  n_system -->|"mower's status"| n_rmx_server
-  n_rmx_server -->|"commands, firmware"| n_system
-  n_system -->|"position"| n_ntrip_caster
-  n_ntrip_caster -->|"corrections"| n_system
-  n_system -->|"driving, corrections"| n_autopilot
-  n_autopilot -->|"mower's status, position"| n_system
+  n_phone <-->|"↓ commands, certificate request<br/>↑ mower's status, certificate"| n_rmx_server
+  n_phone <-->|"↓ driving, certificate<br/>↑ mower's status, certificate request"| n_system
+  n_rmx_server <-->|"↓ commands, firmware<br/>↑ mower's status"| n_system
+  n_system <-->|"↓ position<br/>↑ corrections"| n_ntrip_caster
+  n_system <-->|"↓ driving, corrections<br/>↑ mower's status, position"| n_autopilot
 ```
 
 ## Block

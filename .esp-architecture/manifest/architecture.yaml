@@ -13,8 +13,8 @@ context:
   actors:
     - { id: user, kind: person, description: "Owns the mower: watches it, drives it and sets it up" }
     - { id: phone, kind: device, description: The user's phone }
-    - { id: rmx_server, kind: system, description: "MQTT broker and server app (mqtt.rmx.lt)" }
-    - { id: ntrip_caster, kind: system, description: NTRIP caster for RTK corrections }
+    - { id: rmx_server, name: rmx-server, kind: system, description: "MQTT broker and server app (mqtt.rmx.lt)" }
+    - { id: ntrip_caster, name: NTRIP caster, kind: system, description: NTRIP caster for RTK corrections }
     - { id: autopilot, kind: device, description: The mower's autopilot board }
   flows:
     - { from: user, to: phone, data: "watches, drives, sets up" }
