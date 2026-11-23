@@ -16,7 +16,7 @@ flowchart LR
   n_phone -->|"commands, certificate request"| n_rmx_server
   n_rmx_server -->|"mower's status, certificate"| n_phone
   n_phone -->|"driving, certificate"| n_system
-  n_system -->|"certificate request"| n_phone
+  n_system -->|"mower's status, certificate request"| n_phone
   n_system -->|"mower's status"| n_rmx_server
   n_rmx_server -->|"commands, firmware"| n_system
   n_system -->|"position"| n_ntrip_caster

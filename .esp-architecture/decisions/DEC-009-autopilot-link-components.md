@@ -18,6 +18,8 @@ queue) already exist and are host-tested.
 
 - The transport (`board_link`) sits below both of its users, `relay` and the NTRIP session, like `mqtt_link` sits below
   the services.
+- `board_link` hands received messages to every receiver registered for their frame type, so `relay` and `phone_link`
+  (DEC-011) both get the mower's status without knowing each other. A slow receiver must not hold up the others.
 - No separate UART component: `board_link` is UART2's only user, and ESP-IDF's UART driver is the bus driver.
 - `board_link`'s receive and send tasks have the highest priorities of the firmware: at 921600 baud the receiver must
   keep up, and RTS/CTS covers only a short delay.

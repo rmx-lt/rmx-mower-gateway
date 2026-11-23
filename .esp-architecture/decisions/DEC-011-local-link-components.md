@@ -14,10 +14,13 @@ Two planned components:
 | Component | Layer | Owns |
 |---|---|---|
 | `wifi_link` | links | The Wi-Fi connection to the phone |
-| `phone_link` | services | Carrying the phone's autopilot commands and setpoints to `board_link`; handing the certificate request to the phone and the chain it brings back to `identity` |
+| `phone_link` | services | Carrying the phone's autopilot commands and setpoints to `board_link`; the autopilot's status messages from `board_link` back to the phone; handing the certificate request to the phone and the chain it brings back to `identity` |
 
 - `phone_link` uses `board_link` like `relay` does, so the autopilot sees the phone's messages in the same frames as
   the server's.
+- Status goes to the phone directly: `board_link` hands a received status message to `relay` and to `phone_link`, so it
+  never travels through MQTT and the server on its way to the phone. `phone_link` does not depend on `relay` or
+  `mqtt_link`, and neither waits for the other.
 - `phone_link` provisions through `identity`, the same way `provisioning_console` does (DEC-007), and restarts the board
   through `boot` when a chain is stored.
 - `app_main` starts the local link before it waits for a certificate, so a blank board can be set up without LTE.
@@ -33,6 +36,9 @@ Two planned components:
 
 - **The phone holds or makes the key.** The key never leaves the board (F-REQ-070); a certificate request and a chain
   are not secret, so the phone can relay them.
+- **The phone gets its status from the server.** Each message would go over LTE to the server and back while the driver
+  stands next to the mower, and driving would lose its status whenever LTE is down.
+- **`relay` sends the status to the phone.** The phone would then depend on the MQTT side.
 - **Only the PC provisions.** The owner wants the user to set the mower up with the phone; the PC stays for the workshop.
 
 ## Requirements

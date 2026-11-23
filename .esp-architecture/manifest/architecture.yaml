@@ -21,7 +21,7 @@ context:
     - { from: phone, to: rmx_server, data: "commands, certificate request" }
     - { from: rmx_server, to: phone, data: "mower's status, certificate" }
     - { from: phone, to: system, data: "driving, certificate" }
-    - { from: system, to: phone, data: certificate request }
+    - { from: system, to: phone, data: "mower's status, certificate request" }
     - { from: system, to: rmx_server, data: mower's status }
     - { from: rmx_server, to: system, data: "commands, firmware" }
     - { from: system, to: ntrip_caster, data: position }
@@ -169,7 +169,7 @@ components:
 
   # local_link (planned)
   - { id: wifi_link, subsystem: local_link, layer: links, path: components/wifi_link, description: Wi-Fi connection to the phone (planned), depends_on: [link_state], hardware: [phone_handset], requirements: [F-REQ-080], decisions: [DEC-011, DEC-012] }
-  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: "The phone's commands and setpoints to the board link, provisioning (planned)", depends_on: [wifi_link, board_link, identity, boot], requirements: [F-REQ-072, F-REQ-080], decisions: [DEC-011] }
+  - { id: phone_link, subsystem: local_link, layer: services, path: components/phone_link, description: "The phone's commands and setpoints to the board link, the mower's status back, provisioning (planned)", depends_on: [wifi_link, board_link, identity, boot], requirements: [F-REQ-072, F-REQ-080], decisions: [DEC-011] }
 
 tasks:
   - { id: bl_rx, component: board_link, priority: 10, stack: 4096, description: Board-link receiver }

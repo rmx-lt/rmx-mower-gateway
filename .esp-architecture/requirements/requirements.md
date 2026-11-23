@@ -92,7 +92,7 @@ new requirement.
 
 | ID | Title | Requirement |
 |---|---|---|
-| F-REQ-080 | Let a phone drive the mower over local Wi-Fi | A phone near the mower connects to the gateway over Wi-Fi and sends the same autopilot commands and live-driving setpoints as the server. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1). |
+| F-REQ-080 | Let a phone drive the mower over local Wi-Fi | A phone near the mower connects to the gateway over Wi-Fi and sends the same autopilot commands and live-driving setpoints as the server. While it is connected, the gateway sends it the mower's status straight from the autopilot, not through the server, so the driver sees it with the least delay and also without LTE. The server still gets its own copy when it can be reached. The transport and its protocol are not defined yet (not part of Mower-Protocol 0.1). |
 
 #### Identity and provisioning
 
