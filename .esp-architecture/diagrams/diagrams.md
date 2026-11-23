@@ -14,10 +14,10 @@ flowchart TD
   n_ntrip_caster["NTRIP caster"]
   n_autopilot{{"autopilot"}}
   n_user <-->|"↓ drives, sets up<br/>↑ mower's status"| n_phone
-  n_user -->|"sets up in the workshop"| n_pc
+  n_user <-->|"↓ commands<br/>↑ mower's status"| n_pc
   n_phone <-->|"↓ commands, certificate request<br/>↑ mower's status, certificate"| n_rmx_server
   n_phone <-->|"↓ driving, certificate<br/>↑ mower's status, certificate request"| n_system
-  n_pc <-->|"↓ certificate, firmware<br/>↑ certificate request"| n_system
+  n_pc <-->|"↓ commands<br/>↑ mower's status"| n_rmx_server
   n_rmx_server <-->|"↓ commands, firmware<br/>↑ mower's status"| n_system
   n_system <-->|"↓ position<br/>↑ corrections"| n_ntrip_caster
   n_system <-->|"↓ driving, corrections<br/>↑ mower's status, position"| n_autopilot

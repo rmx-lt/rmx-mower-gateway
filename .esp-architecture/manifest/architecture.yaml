@@ -13,20 +13,21 @@ context:
   actors:
     - { id: user, kind: person, description: "Owns the mower: watches it, drives it and sets it up" }
     - { id: phone, kind: device, description: The user's phone }
-    - { id: pc, name: PC, kind: device, description: "A PC in the workshop, on the board's USB port" }
+    - { id: pc, name: PC, kind: device, description: The user's PC }
     - { id: rmx_server, name: rmx-server, kind: system, description: "MQTT broker and server app (mqtt.rmx.lt)" }
     - { id: ntrip_caster, name: NTRIP caster, kind: system, description: NTRIP caster for RTK corrections }
     - { id: autopilot, kind: device, description: The mower's autopilot board }
   flows:
     - { from: user, to: phone, data: "drives, sets up" }
     - { from: phone, to: user, data: mower's status }
-    - { from: user, to: pc, data: sets up in the workshop }
+    - { from: user, to: pc, data: commands }
+    - { from: pc, to: user, data: mower's status }
     - { from: phone, to: rmx_server, data: "commands, certificate request" }
     - { from: rmx_server, to: phone, data: "mower's status, certificate" }
     - { from: phone, to: system, data: "driving, certificate" }
     - { from: system, to: phone, data: "mower's status, certificate request" }
-    - { from: pc, to: system, data: "certificate, firmware" }
-    - { from: system, to: pc, data: certificate request }
+    - { from: pc, to: rmx_server, data: commands }
+    - { from: rmx_server, to: pc, data: mower's status }
     - { from: system, to: rmx_server, data: mower's status }
     - { from: rmx_server, to: system, data: "commands, firmware" }
     - { from: system, to: ntrip_caster, data: position }
@@ -50,7 +51,7 @@ hardware:
     - { id: sim7600, name: SIM7600G-H modem, bus: [uart_modem, gpio_modem], description: LTE modem }
     - { id: user_led, name: user LED, bus: gpio_led, description: "Blue LED, on while PPP is up" }
     - { id: autopilot_board, name: autopilot board, bus: [uart_board, gpio_reset], description: The mower's ESP32-P4 autopilot }
-    - { id: usb_bridge, name: USB-UART bridge, bus: uart_console, description: CH9102 to the workshop PC }
+    - { id: usb_bridge, name: USB-UART bridge, bus: uart_console, description: CH9102 to the development PC }
     - { id: phone_handset, name: phone, bus: wifi, description: A phone near the mower }
     - id: flash
       name: flash
