@@ -39,10 +39,10 @@ flowchart TD
     con["console driver"]
     subgraph msg["message routing"]
       lock["control lock"]
+      chk["command check"]
       q["offline queue"]
     end
     prov["provisioning"]
-    cmd["commands"]
     upd["firmware update"]
     met["metrics"]
     mon["monitor"]
@@ -77,12 +77,10 @@ flowchart TD
   con --- msg
   conn --- msg
   msg --- upd
-  msg --- cmd
   msg --- met
   msg --- bl
   met --- mon
-  cmd --- mon
-  cmd --- upd
+  msg --- mon
   conn --- set
   prov --- set
   upd --- fs
