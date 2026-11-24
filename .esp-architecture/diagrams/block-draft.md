@@ -44,11 +44,11 @@ flowchart TD
     prov["provisioning"]
     cmd["commands"]
     upd["firmware update"]
-    state["gateway state"]
     met["metrics"]
     mon["monitor"]
     subgraph help["helpers"]
       clk["clock"]
+      state["gateway state"]
       ls["link state"]
       rec["recovery"]
       boot["boot counter"]
@@ -77,7 +77,6 @@ flowchart TD
   conn --- msg
   msg --- upd
   msg --- cmd
-  msg --- state
   msg --- met
   msg --- bl
   met --- mon
@@ -86,7 +85,6 @@ flowchart TD
   conn --- set
   prov --- set
   cmd --- bl
-  state --- bl
   upd --- fs
   set --- fs
   fs --- sp --- fparts
