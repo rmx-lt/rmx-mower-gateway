@@ -39,6 +39,7 @@ flowchart TD
     con["console driver"]
     subgraph msg["message routing"]
       lock["control lock"]
+      q["offline queue"]
     end
     prov["provisioning"]
     cmd["commands"]
@@ -52,7 +53,6 @@ flowchart TD
       rec["recovery"]
       boot["boot counter"]
     end
-    q["offline queue"]
     bl["autopilot driver"]
     set["settings"]
     fs["flash driver"]
@@ -86,7 +86,6 @@ flowchart TD
   cmd --- upd
   conn --- prov
   prov --- set
-  conn --- q
   cmd --- bl
   state --- bl
   upd --- fs
