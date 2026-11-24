@@ -47,9 +47,9 @@ flowchart TD
     state["gateway state"]
     met["metrics"]
     mon["monitor"]
-    ls["link state"]
     subgraph help["helpers"]
       clk["clock"]
+      ls["link state"]
       rec["recovery"]
       boot["boot counter"]
     end
@@ -75,7 +75,6 @@ flowchart TD
   msg --- prov
   con --- prov
   conn --- msg
-  conn --- ls
   conn --- upd
   msg --- cmd
   msg --- state
