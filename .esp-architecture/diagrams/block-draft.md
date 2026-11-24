@@ -1,21 +1,21 @@
 # Block diagram draft
 
-Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. A device is split by the bus its parts use.
+Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Inside a device: its aspects, grouped by the bus they use.
 
 ```mermaid
 flowchart TD
   subgraph modem["<b>modem</b>"]
-    mctl["power<br/>radio<br/>sleep<br/>status"]
-    mdata["data"]
+    mctl["power management<hr/>power<br/>radio<br/>sleep<br/>status"]
+    mdata["data link"]
   end
   subgraph led["<b>LED</b>"]
     lparts["light"]
   end
   subgraph ph["<b>phone</b>"]
-    pparts["control<br/>mower state<br/>setup"]
+    pparts["messages"]
   end
   subgraph usb["<b>USB bridge</b>"]
-    uparts["console<br/>log"]
+    uparts["console"]
   end
   subgraph cpu["<b>ESP32</b>"]
     u1["UART1"]
@@ -57,7 +57,7 @@ flowchart TD
     amsg["messages"]
   end
   subgraph fl["<b>flash</b>"]
-    fparts["settings<br/>identity<br/>app slots<br/>crash dump"]
+    fparts["storage<hr/>settings<br/>identity<br/>app slots<br/>crash dump"]
   end
   mdata --- u1 --- conn
   mctl --- gm --- pwr --- conn

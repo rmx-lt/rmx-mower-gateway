@@ -7,3 +7,9 @@ Rules agreed so far. The draft: [block-draft.md](block-draft.md). Temporary, lik
 3. **Communication boxes.** One per communication resource. A bus shared by several devices may be drawn once per device, so its lines stay short.
 4. **Bus owner.** Each shared bus has exactly one driver box, and all of the bus's communication boxes connect to it. No other box touches the bus.
 5. **Lines.** A line means that two boxes belong next to each other, because one uses the other directly. It replaces position, has no arrow and no label, and does not tell data from control.
+6. **Aspects.** An aspect is one thing about an outside device that the firmware stores, exchanges, switches or senses. Every connection has at least one aspect of its own, and never shares it. A connection is one bus (however many wires) or one GPIO pin. So four GPIO pins are four aspects, and one SPI bus may have several.
+   - Stored: one aspect per region with its own purpose.
+   - Exchanged: one aspect per bus, whatever the messages contain. Two directions are one aspect.
+   - Switched or sensed: one aspect per pin.
+7. **Aspect groups.** The aspects that use the same communication box sit in one inner box. With more than one aspect, the inner box gets a title and a separator line. GPIO aspects are listed in the order of their pins.
+8. **Aspect names.** A lowercase noun of one or two words, and not the bus, pin, protocol or device name. There are no lists inside an aspect.
