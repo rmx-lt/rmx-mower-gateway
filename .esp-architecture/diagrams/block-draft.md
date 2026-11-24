@@ -96,7 +96,7 @@ flowchart TD
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
   class con,phd,conn,bl driver
-  classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:4 3
+  classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:9 6
   class fs sysdriver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
