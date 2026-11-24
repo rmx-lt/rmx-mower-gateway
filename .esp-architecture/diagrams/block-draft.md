@@ -44,8 +44,10 @@ flowchart TD
     end
     prov["provisioning"]
     upd["firmware update"]
-    met["metrics"]
-    mon["monitor"]
+    subgraph tel["telemetry"]
+      met["metrics"]
+      mon["monitor"]
+    end
     subgraph help["helpers"]
       clk["clock"]
       state["gateway state"]
@@ -77,10 +79,8 @@ flowchart TD
   con --- msg
   conn --- msg
   msg --- upd
-  msg --- met
+  msg --- tel
   msg --- bl
-  met --- mon
-  msg --- mon
   conn --- set
   prov --- set
   upd --- fs
@@ -97,7 +97,7 @@ flowchart TD
   classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
   class help helpers
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
-  class msg owner
+  class msg,tel owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn ownerdriver
   classDef device fill:none,stroke:#888
