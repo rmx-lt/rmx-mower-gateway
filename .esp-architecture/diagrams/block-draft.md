@@ -24,9 +24,7 @@ flowchart TD
     gr["GPIO 21"]
     wf["Wi-Fi"]
     u0["UART0"]
-    conn["modem connection"]
-    pwr["modem power"]
-    ledd["LED driver"]
+    conn["modem driver"]
     phd["phone driver"]
     con["console driver"]
     ntrip["corrections"]
@@ -59,8 +57,8 @@ flowchart TD
     fparts["storage<hr/>settings<br/>identity<br/>app slots<br/>crash dump"]
   end
   mdata --- u1 --- conn
-  mctl --- gm --- pwr --- conn
-  lparts --- gl --- ledd --- conn
+  mctl --- gm --- conn
+  lparts --- gl --- conn
   pparts --- wf --- phd
   uparts --- u0 --- con
   phd --- msg
@@ -97,7 +95,7 @@ flowchart TD
   classDef bus stroke:#58a6ff,stroke-width:2px
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
-  class con,phd,ledd driver
+  class con,phd,conn driver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
