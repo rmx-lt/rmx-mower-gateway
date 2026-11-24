@@ -83,7 +83,7 @@ flowchart TD
   met --- mon
   cmd --- mon
   cmd --- upd
-  conn --- prov
+  conn --- set
   prov --- set
   cmd --- bl
   state --- bl
