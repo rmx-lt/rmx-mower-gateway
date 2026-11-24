@@ -52,6 +52,7 @@ flowchart TD
       ls["link state"]
       rec["recovery"]
       boot["boot counter"]
+      clk ~~~ state ~~~ ls ~~~ rec ~~~ boot
     end
     bl["autopilot driver"]
     set["settings"]
