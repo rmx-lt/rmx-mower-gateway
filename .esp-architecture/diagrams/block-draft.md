@@ -75,7 +75,7 @@ flowchart TD
   msg --- prov
   con --- prov
   conn --- msg
-  conn --- upd
+  msg --- upd
   msg --- cmd
   msg --- state
   msg --- met
