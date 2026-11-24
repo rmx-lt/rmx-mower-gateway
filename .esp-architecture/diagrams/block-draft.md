@@ -85,7 +85,6 @@ flowchart TD
   cmd --- upd
   conn --- set
   prov --- set
-  cmd --- bl
   upd --- fs
   set --- fs
   fs --- sp --- fparts
