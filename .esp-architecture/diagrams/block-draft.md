@@ -27,11 +27,10 @@ flowchart TD
     conn["modem connection"]
     pwr["modem power"]
     ledd["LED driver"]
-    wl["Wi-Fi link"]
+    phd["phone driver"]
     con["console driver"]
     ntrip["corrections"]
     mqtt["server connection"]
-    phc["phone connection"]
     msg["message routing"]
     lock["control lock"]
     prov["provisioning"]
@@ -62,11 +61,10 @@ flowchart TD
   mdata --- u1 --- conn
   mctl --- gm --- pwr --- conn
   lparts --- gl --- ledd --- conn
-  pparts --- wf --- wl
+  pparts --- wf --- phd
   uparts --- u0 --- con
-  wl --- phc
-  phc --- msg
-  phc --- prov
+  phd --- msg
+  msg --- prov
   con --- prov
   conn --- mqtt
   conn --- ntrip
@@ -99,7 +97,7 @@ flowchart TD
   classDef bus stroke:#58a6ff,stroke-width:2px
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
-  class con,ledd driver
+  class con,phd,ledd driver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
