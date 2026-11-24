@@ -48,9 +48,9 @@ flowchart TD
     ls["link state"]
     subgraph help["helpers"]
       clk["clock"]
+      rec["recovery"]
+      boot["boot counter"]
     end
-    rec["recovery"]
-    boot["boot counter"]
     q["offline queue"]
     bl["autopilot driver"]
     set["settings"]
@@ -88,9 +88,6 @@ flowchart TD
   cmd --- upd
   prov --- mqtt
   prov --- set
-  ls --- rec
-  rec --- boot
-  boot --- set
   mqtt --- q
   cmd --- bl
   state --- bl
