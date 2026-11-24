@@ -43,7 +43,7 @@ flowchart TD
     boot["boot counter"]
     relay["relay"]
     q["offline queue"]
-    bl["board link"]
+    bl["autopilot driver"]
     set["settings"]
     fs["flash storage"]
     u2["UART2"]
@@ -95,7 +95,7 @@ flowchart TD
   classDef bus stroke:#58a6ff,stroke-width:2px
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
-  class con,phd,conn driver
+  class con,phd,conn,bl driver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
