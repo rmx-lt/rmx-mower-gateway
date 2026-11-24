@@ -13,3 +13,5 @@ Rules agreed so far. The draft: [block-draft.md](block-draft.md). Temporary, lik
    - Switched or sensed: one aspect per pin.
 7. **Aspect groups.** The aspects that use the same communication box sit in one inner box. With more than one aspect, the inner box gets a title and a separator line. GPIO aspects are listed in the order of their pins.
 8. **Aspect names.** A lowercase noun of one or two words, and not the bus, pin, protocol or device name. There are no lists inside an aspect.
+9. **Drivers.** Each device has one driver, the box next to its communication boxes. It translates between what travels over the connection and what the rest of the firmware asks for. It is named `<device> driver`, or `<aspect> driver` when the device only passes bytes on (USB bridge: console driver).
+10. **Own code.** Inside the processor, a box other than a communication box is code of this project. What comes ready-made is not drawn: the framework's log, flashing.

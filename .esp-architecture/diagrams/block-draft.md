@@ -28,7 +28,7 @@ flowchart TD
     pwr["modem power"]
     ledd["LED driver"]
     wl["Wi-Fi link"]
-    con["console"]
+    con["console driver"]
     ntrip["corrections"]
     mqtt["server connection"]
     phc["phone connection"]
