@@ -3,6 +3,13 @@
 Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Green: drivers; dashed: provided by the system, not ours. Inside a device: its aspects, grouped by the bus they use.
 
 ```mermaid
+---
+config:
+  flowchart:
+    subGraphTitleMargin:
+      top: 10
+      bottom: 4
+---
 flowchart TD
   subgraph modem["<b>modem</b>"]
     mctl["operation<hr/>power<br/>radio<br/>sleep<br/>status"]
@@ -29,7 +36,9 @@ flowchart TD
     con["console driver"]
     ntrip["corrections"]
     mqtt["server connection"]
-    msg["message routing<div style='border:1px solid;margin:6px 4px 2px;padding:4px 8px'>control lock</div>"]
+    subgraph msg["message routing"]
+      lock["control lock"]
+    end
     prov["provisioning"]
     cmd["commands"]
     upd["firmware update"]
@@ -99,6 +108,8 @@ flowchart TD
   class fs sysdriver
   classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
   class help helpers
+  classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
+  class msg owner
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
