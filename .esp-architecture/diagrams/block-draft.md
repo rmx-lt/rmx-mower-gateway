@@ -32,11 +32,11 @@ flowchart TD
     wf["Wi-Fi"]
     u0["UART0"]
     subgraph conn["modem driver"]
+      mqtt["server connection"]
       cast["caster connection"]
     end
     phd["phone driver"]
     con["console driver"]
-    mqtt["server connection"]
     subgraph msg["message routing"]
       lock["control lock"]
     end
@@ -74,12 +74,9 @@ flowchart TD
   phd --- msg
   msg --- prov
   con --- prov
-  conn --- mqtt
   conn --- msg
   conn --- ls
-  mqtt --- ls
-  mqtt --- msg
-  mqtt --- upd
+  conn --- upd
   msg --- cmd
   msg --- state
   msg --- met
@@ -87,9 +84,9 @@ flowchart TD
   met --- mon
   cmd --- mon
   cmd --- upd
-  prov --- mqtt
+  conn --- prov
   prov --- set
-  mqtt --- q
+  conn --- q
   cmd --- bl
   state --- bl
   upd --- fs
