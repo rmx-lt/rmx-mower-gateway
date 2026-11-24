@@ -41,7 +41,6 @@ flowchart TD
     clk["clock"]
     rec["recovery"]
     boot["boot counter"]
-    relay["relay"]
     q["offline queue"]
     bl["autopilot driver"]
     set["settings"]
@@ -75,7 +74,7 @@ flowchart TD
   msg --- cmd
   msg --- state
   msg --- met
-  msg --- relay
+  msg --- bl
   met --- mon
   cmd --- mon
   cmd --- upd
@@ -84,8 +83,9 @@ flowchart TD
   ls --- rec
   rec --- boot
   boot --- set
-  relay --- q
-  relay --- bl
+  mqtt --- q
+  cmd --- bl
+  state --- bl
   ntrip --- bl
   upd --- fs
   set --- fs
