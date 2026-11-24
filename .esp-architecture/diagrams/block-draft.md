@@ -31,10 +31,11 @@ flowchart TD
     gr["GPIO 21"]
     wf["Wi-Fi"]
     u0["UART0"]
-    conn["modem driver"]
+    subgraph conn["modem driver"]
+      cast["caster connection"]
+    end
     phd["phone driver"]
     con["console driver"]
-    ntrip["corrections"]
     mqtt["server connection"]
     subgraph msg["message routing"]
       lock["control lock"]
@@ -74,7 +75,7 @@ flowchart TD
   msg --- prov
   con --- prov
   conn --- mqtt
-  conn --- ntrip
+  conn --- msg
   conn --- ls
   mqtt --- ls
   mqtt --- msg
@@ -91,7 +92,6 @@ flowchart TD
   mqtt --- q
   cmd --- bl
   state --- bl
-  ntrip --- bl
   upd --- fs
   set --- fs
   fs --- sp --- fparts
@@ -100,13 +100,15 @@ flowchart TD
   classDef bus stroke:#58a6ff,stroke-width:2px
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
-  class con,phd,conn,bl driver
+  class con,phd,bl driver
   classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:9 6
   class fs sysdriver
   classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
   class help helpers
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
   class msg owner
+  classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
+  class conn ownerdriver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
