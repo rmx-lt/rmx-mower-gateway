@@ -29,8 +29,9 @@ flowchart TD
     con["console driver"]
     ntrip["corrections"]
     mqtt["server connection"]
-    msg["message routing"]
-    lock["control lock"]
+    subgraph msg["message routing"]
+      lock["control lock"]
+    end
     prov["provisioning"]
     cmd["commands"]
     upd["firmware update"]
@@ -71,7 +72,6 @@ flowchart TD
   mqtt --- ls
   mqtt --- msg
   mqtt --- upd
-  msg --- lock
   msg --- cmd
   msg --- state
   msg --- met
@@ -101,6 +101,8 @@ flowchart TD
   class fs sysdriver
   classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
   class help helpers
+  classDef block fill:none
+  class msg block
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
