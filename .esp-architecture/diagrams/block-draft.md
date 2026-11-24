@@ -1,6 +1,6 @@
 # Block diagram draft
 
-Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue, dashed: ways of communicating. Green: drivers. Inside a device: its aspects, grouped by the bus they use.
+Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Green: drivers. Inside a device: its aspects, grouped by the bus they use.
 
 ```mermaid
 flowchart TD
@@ -96,7 +96,7 @@ flowchart TD
   fs --- sp --- fparts
   bl --- u2 --- amsg
   bl --- gr --- areset
-  classDef bus stroke:#58a6ff,stroke-width:2px,stroke-dasharray:4 3
+  classDef bus stroke:#58a6ff,stroke-width:2px
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
   class con,ledd driver
