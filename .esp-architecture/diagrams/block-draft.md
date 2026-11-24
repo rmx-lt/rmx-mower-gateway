@@ -1,6 +1,6 @@
 # Block diagram draft
 
-Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Green: drivers. Inside a device: its aspects, grouped by the bus they use.
+Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Green: drivers; dashed: provided by the system, not ours. Inside a device: its aspects, grouped by the bus they use.
 
 ```mermaid
 flowchart TD
@@ -45,7 +45,7 @@ flowchart TD
     q["offline queue"]
     bl["autopilot driver"]
     set["settings"]
-    fs["flash storage"]
+    fs["flash driver"]
     u2["UART2"]
     sp["SPI0/1"]
   end
@@ -96,6 +96,8 @@ flowchart TD
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
   class con,phd,conn,bl driver
+  classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:4 3
+  class fs sysdriver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
