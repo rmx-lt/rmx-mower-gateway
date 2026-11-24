@@ -5,7 +5,7 @@ Hand-drawn, not generated. From the hardware to the product function; a line is 
 ```mermaid
 flowchart TD
   subgraph modem["<b>modem</b>"]
-    mctl["power management<hr/>power<br/>radio<br/>sleep<br/>status"]
+    mctl["operation<hr/>power<br/>radio<br/>sleep<br/>status"]
     mdata["data link"]
   end
   subgraph led["<b>LED</b>"]
