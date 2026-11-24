@@ -38,7 +38,9 @@ flowchart TD
     met["metrics"]
     mon["monitor"]
     ls["link state"]
-    clk["clock"]
+    subgraph help["helpers"]
+      clk["clock"]
+    end
     rec["recovery"]
     boot["boot counter"]
     q["offline queue"]
@@ -65,7 +67,6 @@ flowchart TD
   con --- prov
   conn --- mqtt
   conn --- ntrip
-  conn --- clk
   conn --- ls
   mqtt --- ls
   mqtt --- msg
@@ -98,6 +99,8 @@ flowchart TD
   class con,phd,conn,bl driver
   classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:9 6
   class fs sysdriver
+  classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
+  class help helpers
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
