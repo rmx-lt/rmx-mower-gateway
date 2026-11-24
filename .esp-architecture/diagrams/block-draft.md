@@ -73,7 +73,7 @@ flowchart TD
   uparts --- u0 --- con
   phd --- msg
   msg --- prov
-  con --- prov
+  con --- msg
   conn --- msg
   msg --- upd
   msg --- cmd
