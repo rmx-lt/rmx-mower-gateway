@@ -49,13 +49,13 @@ flowchart TD
       q ~~~ ls
       lock ~~~ chk
     end
-    subgraph gw["gateway"]
-      tel["telemetry"]
+    subgraph tel["telemetry"]
+      meas["measurements"]
       state["gateway state"]
+    end
+    subgraph mgmt["gateway management"]
       rec["recovery"]
       up["server link up"]
-      tel ~~~ state
-      rec ~~~ up
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
@@ -92,9 +92,10 @@ flowchart TD
   phd --- msg
   con --- msg
   conn --- msg
-  msg --- gw
-  msg --- fs
-  msg --- esp
+  msg --- tel
+  msg --- mgmt
+  mgmt --- fs
+  mgmt --- esp
   msg --- bl
   fs --- sp --- fparts
   bl --- u2 --- amsg
@@ -104,7 +105,7 @@ flowchart TD
   classDef driver stroke:#3fb950,stroke-width:2px
   class con,phd,bl driver
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
-  class msg,gw owner
+  class msg,tel,mgmt owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs,esp ownerdriver
   classDef pad fill:none,stroke:none
