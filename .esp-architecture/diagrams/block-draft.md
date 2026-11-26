@@ -48,12 +48,16 @@ flowchart TD
       clk["clock"]
       ls["link state"]
       rec["recovery"]
+      tel ~~~ clk
+      state ~~~ ls
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
       boot["boot counter"]
       live["task check"]
       load["processor load"]
+      rst ~~~ live
+      boot ~~~ load
     end
     bl["autopilot driver"]
     subgraph fs["storage driver"]
