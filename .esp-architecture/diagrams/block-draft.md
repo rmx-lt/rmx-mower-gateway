@@ -41,6 +41,7 @@ flowchart TD
       lock["control lock"]
       chk["command check"]
       q["offline queue"]
+      lock ~~~ chk
     end
     subgraph gw["gateway"]
       tel["telemetry"]
@@ -64,6 +65,7 @@ flowchart TD
       set["settings"]
       prov["provisioning"]
       upd["firmware update"]
+      set ~~~ prov
     end
     u2["UART2"]
     sp["SPI0/1"]
