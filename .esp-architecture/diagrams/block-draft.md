@@ -42,10 +42,7 @@ flowchart TD
       chk["command check"]
       q["offline queue"]
     end
-    subgraph tel["telemetry"]
-      met["metrics"]
-      mon["monitor"]
-    end
+    tel["telemetry"]
     subgraph help["helpers"]
       clk["clock"]
       state["gateway state"]
@@ -91,7 +88,7 @@ flowchart TD
   classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
   class help helpers
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
-  class msg,tel owner
+  class msg owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs ownerdriver
   classDef device fill:none,stroke:#888
