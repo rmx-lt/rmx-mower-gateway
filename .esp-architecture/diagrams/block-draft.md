@@ -41,20 +41,17 @@ flowchart TD
       lock["control lock"]
       chk["command check"]
       q["offline queue"]
-      p1[" "]
-      q ~~~ p1
+      ls["link state"]
+      q ~~~ ls
       lock ~~~ chk
     end
     subgraph gw["gateway"]
       tel["telemetry"]
       state["gateway state"]
       clk["clock"]
-      ls["link state"]
       rec["recovery"]
       tel ~~~ clk
-      state ~~~ ls
-      p3[" "]
-      rec ~~~ p3
+      state ~~~ rec
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
@@ -107,7 +104,7 @@ flowchart TD
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs,esp ownerdriver
   classDef pad fill:none,stroke:none
-  class p1,p2,p3 pad
+  class p2 pad
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
