@@ -5,6 +5,8 @@ Hand-drawn, not generated. From the hardware to the product function; a line is 
 ```mermaid
 ---
 config:
+  themeVariables:
+    fontFamily: "Arial, Helvetica, sans-serif"
   flowchart:
     subGraphTitleMargin:
       top: 10
@@ -26,14 +28,14 @@ flowchart TD
   end
   subgraph cpu["<b>ESP32</b>"]
     u1["UART1"]
-    gm["GPIO 4, 25, 32, 34"]
+    gm["GPIO 4, 25,<br/>32, 34"]
     gl["GPIO 12"]
     gr["GPIO 21"]
     wf["Wi-Fi"]
     u0["UART0"]
     subgraph conn["modem driver"]
-      mqtt["server connection"]
-      cast["caster connection"]
+      mqtt["server<br/>connection"]
+      cast["caster<br/>connection"]
     end
     phd["phone driver"]
     con["console driver"]
