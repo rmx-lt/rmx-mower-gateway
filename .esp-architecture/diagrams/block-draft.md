@@ -42,19 +42,18 @@ flowchart TD
       chk["command check"]
       q["offline queue"]
     end
-    tel["telemetry"]
+    subgraph gw["gateway"]
+      tel["telemetry"]
+      state["gateway state"]
+      clk["clock"]
+      ls["link state"]
+      rec["recovery"]
+    end
     subgraph esp["ESP32 driver"]
       rst["restart"]
       boot["boot counter"]
       live["task check"]
       load["processor load"]
-    end
-    subgraph help["helpers"]
-      clk["clock"]
-      state["gateway state"]
-      ls["link state"]
-      rec["recovery"]
-      clk ~~~ state ~~~ ls ~~~ rec
     end
     bl["autopilot driver"]
     subgraph fs["storage driver"]
@@ -80,7 +79,7 @@ flowchart TD
   phd --- msg
   con --- msg
   conn --- msg
-  msg --- tel
+  msg --- gw
   msg --- fs
   msg --- esp
   msg --- bl
@@ -91,10 +90,8 @@ flowchart TD
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
   class con,phd,bl driver
-  classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
-  class help helpers
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
-  class msg owner
+  class msg,gw owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs,esp ownerdriver
   classDef device fill:none,stroke:#888
