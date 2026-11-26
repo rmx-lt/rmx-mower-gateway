@@ -53,7 +53,6 @@ flowchart TD
     subgraph mgmt["gateway management"]
       gdata["gateway data<hr/>firmware<br/>boot number<br/>control mode<br/>links"]
       gact["gateway actions<hr/>recovery<br/>server link up"]
-      gdata ~~~ gact
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
