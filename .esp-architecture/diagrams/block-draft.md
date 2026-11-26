@@ -5,8 +5,6 @@ Hand-drawn, not generated. From the hardware to the product function; a line is 
 ```mermaid
 ---
 config:
-  themeVariables:
-    fontFamily: "Arial, Helvetica, sans-serif"
   flowchart:
     subGraphTitleMargin:
       top: 10
