@@ -17,3 +17,4 @@ Rules agreed so far. The draft: [block-draft.md](block-draft.md). Temporary, lik
 10. **Own code.** Inside the processor, a box other than a communication box is code of this project. Ready-made code is drawn only when it is a device's driver and no driver of this project wraps it. The framework's log and flashing are not drawn.
 11. **Colours.** Communication boxes have a solid blue outline, drivers a solid green one. A driver that the system provides, so it is not code of this project, has a dashed green outline. Other boxes have no colour.
 12. **A block inside a block** is owned by it: only the outer block uses it, and lines from outside go to the outer block. The outer block is a container with a grey fill and a solid outline. An outer block that is a driver keeps its green outline. A container without a fill only groups.
+13. **Layout.** Blocks inside a block sit in a grid of two rows; an odd count leaves one cell empty.
