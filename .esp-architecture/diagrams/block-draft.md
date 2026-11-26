@@ -1,6 +1,6 @@
 # Block diagram draft
 
-Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Green: drivers; dashed: provided by the system, not ours. Inside a device: its aspects, grouped by the bus they use.
+Hand-drawn, not generated. From the hardware to the product function; a line is a connection. Blue: ways of communicating. Green: drivers. Inside a device: its aspects, grouped by the bus they use.
 
 ```mermaid
 ---
@@ -42,8 +42,6 @@ flowchart TD
       chk["command check"]
       q["offline queue"]
     end
-    prov["provisioning"]
-    upd["firmware update"]
     subgraph tel["telemetry"]
       met["metrics"]
       mon["monitor"]
@@ -57,8 +55,11 @@ flowchart TD
       clk ~~~ state ~~~ ls ~~~ rec ~~~ boot
     end
     bl["autopilot driver"]
-    set["settings"]
-    fs["flash driver"]
+    subgraph fs["storage driver"]
+      set["settings"]
+      prov["provisioning"]
+      upd["firmware update"]
+    end
     u2["UART2"]
     sp["SPI0/1"]
   end
@@ -75,16 +76,11 @@ flowchart TD
   pparts --- wf --- phd
   uparts --- u0 --- con
   phd --- msg
-  msg --- prov
   con --- msg
   conn --- msg
-  msg --- upd
   msg --- tel
+  msg --- fs
   msg --- bl
-  conn --- set
-  prov --- set
-  upd --- fs
-  set --- fs
   fs --- sp --- fparts
   bl --- u2 --- amsg
   bl --- gr --- areset
@@ -92,14 +88,12 @@ flowchart TD
   class u1,gm,gl,gr,u2,wf,u0,sp bus
   classDef driver stroke:#3fb950,stroke-width:2px
   class con,phd,bl driver
-  classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:9 6
-  class fs sysdriver
   classDef helpers fill:none,stroke:#888,stroke-dasharray:4 3
   class help helpers
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
   class msg,tel owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
-  class conn ownerdriver
+  class conn,fs ownerdriver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
