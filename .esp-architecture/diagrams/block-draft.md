@@ -34,6 +34,10 @@ flowchart TD
     subgraph conn["modem driver"]
       mqtt["server<br/>connection"]
       cast["caster<br/>connection"]
+      clk["clock"]
+      p4[" "]
+      mqtt ~~~ clk
+      cast ~~~ p4
     end
     phd["phone driver"]
     con["console driver"]
@@ -48,10 +52,10 @@ flowchart TD
     subgraph gw["gateway"]
       tel["telemetry"]
       state["gateway state"]
-      clk["clock"]
       rec["recovery"]
-      tel ~~~ clk
-      state ~~~ rec
+      p5[" "]
+      tel ~~~ state
+      rec ~~~ p5
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
@@ -104,7 +108,7 @@ flowchart TD
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs,esp ownerdriver
   classDef pad fill:none,stroke:none
-  class p2 pad
+  class p2,p4,p5 pad
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
