@@ -37,7 +37,7 @@ flowchart TD
     end
     phd["phone driver"]
     con["console driver"]
-    subgraph msg["message routing"]
+    subgraph msg["router"]
       lock["control lock"]
       chk["command check"]
       q["offline queue"]
