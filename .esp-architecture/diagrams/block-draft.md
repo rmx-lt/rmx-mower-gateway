@@ -43,13 +43,18 @@ flowchart TD
       q["offline queue"]
     end
     tel["telemetry"]
+    subgraph esp["ESP32 driver"]
+      rst["restart"]
+      boot["boot counter"]
+      live["task check"]
+      load["processor load"]
+    end
     subgraph help["helpers"]
       clk["clock"]
       state["gateway state"]
       ls["link state"]
       rec["recovery"]
-      boot["boot counter"]
-      clk ~~~ state ~~~ ls ~~~ rec ~~~ boot
+      clk ~~~ state ~~~ ls ~~~ rec
     end
     bl["autopilot driver"]
     subgraph fs["storage driver"]
@@ -77,6 +82,7 @@ flowchart TD
   conn --- msg
   msg --- tel
   msg --- fs
+  msg --- esp
   msg --- bl
   fs --- sp --- fparts
   bl --- u2 --- amsg
@@ -90,7 +96,7 @@ flowchart TD
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
   class msg owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
-  class conn,fs ownerdriver
+  class conn,fs,esp ownerdriver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
