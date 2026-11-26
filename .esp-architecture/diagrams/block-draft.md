@@ -52,7 +52,7 @@ flowchart TD
     tel["telemetry"]
     subgraph mgmt["gateway management"]
       gdata["data<hr/>firmware<br/>settings<br/>certificate"]
-      gact["actions<hr/>recovery<br/>server link up<br/>firmware update<br/>provisioning"]
+      gact["actions<hr/>recovery<br/>server link up<br/>firmware#160;update<br/>provisioning"]
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
