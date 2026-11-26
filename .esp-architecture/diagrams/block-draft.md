@@ -51,8 +51,8 @@ flowchart TD
     end
     tel["telemetry"]
     subgraph mgmt["gateway management"]
-      gdata["gateway data<hr/>firmware<br/>boot number<br/>control mode<br/>links"]
-      gact["gateway actions<hr/>recovery<br/>server link up"]
+      gdata["data<hr/>firmware<br/>settings<br/>certificate"]
+      gact["actions<hr/>recovery<br/>server link up<br/>firmware update<br/>provisioning"]
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
@@ -63,14 +63,7 @@ flowchart TD
       boot ~~~ load
     end
     bl["autopilot driver"]
-    subgraph fs["storage driver"]
-      set["settings"]
-      prov["provisioning"]
-      upd["firmware update"]
-      p2[" "]
-      set ~~~ prov
-      upd ~~~ p2
-    end
+    fs["flash driver"]
     u2["UART2"]
     sp["SPI0/1"]
   end
@@ -104,9 +97,9 @@ flowchart TD
   classDef owner fill:#8884,stroke:#aaa,stroke-width:2px
   class msg,mgmt owner
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
-  class conn,fs,esp ownerdriver
-  classDef pad fill:none,stroke:none
-  class p2 pad
+  class conn,esp ownerdriver
+  classDef sysdriver stroke:#3fb950,stroke-width:2px,stroke-dasharray:9 6
+  class fs sysdriver
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
