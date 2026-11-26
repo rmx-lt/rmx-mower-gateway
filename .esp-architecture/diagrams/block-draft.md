@@ -35,9 +35,9 @@ flowchart TD
       mqtt["server<br/>connection"]
       cast["caster<br/>connection"]
       clk["clock"]
-      p4[" "]
+      mob["mobile data"]
       mqtt ~~~ clk
-      cast ~~~ p4
+      cast ~~~ mob
     end
     phd["phone driver"]
     con["console driver"]
@@ -108,7 +108,7 @@ flowchart TD
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs,esp ownerdriver
   classDef pad fill:none,stroke:none
-  class p2,p4,p5 pad
+  class p2,p5 pad
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
