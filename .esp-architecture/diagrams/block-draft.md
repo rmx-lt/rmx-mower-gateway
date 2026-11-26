@@ -51,12 +51,9 @@ flowchart TD
     end
     tel["telemetry"]
     subgraph mgmt["gateway management"]
-      rec["recovery"]
-      up["server link up"]
-      state["gateway state"]
-      p6[" "]
-      rec ~~~ state
-      up ~~~ p6
+      gdata["gateway data<hr/>firmware<br/>boot number<br/>control mode<br/>links"]
+      gact["gateway actions<hr/>recovery<br/>server link up"]
+      gdata ~~~ gact
     end
     subgraph esp["ESP32 driver"]
       rst["restart"]
@@ -110,7 +107,7 @@ flowchart TD
   classDef ownerdriver fill:#8884,stroke:#3fb950,stroke-width:2px
   class conn,fs,esp ownerdriver
   classDef pad fill:none,stroke:none
-  class p2,p6 pad
+  class p2 pad
   classDef device fill:none,stroke:#888
   class modem,mdata,mctl,led,lparts,ap,amsg,areset,ph,pparts,usb,uparts,fl,fparts device
 ```
